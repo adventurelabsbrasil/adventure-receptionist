@@ -3,6 +3,12 @@
 `adventure-receptionist` é o núcleo inicial do Adventure Agent Orchestration Control Plane.
 `buzz` é a persona e o comando de entrada.
 
+## O que significa Buzz
+
+Neste projeto, Buzz não significa buzz de marketing, tendência, hype ou volume de conversa.
+Buzz é o sistema local-first de recepção, triagem, contexto explícito, handoff e controle
+operacional dos agentes da Adventure — uma camada para separar sinal de ruído.
+
 O MVP é local-first, model-agnostic e read-only por padrão. Ele valida o fluxo de intake,
 triagem, contexto explícito, handoff e observabilidade antes de adicionar conectores externos.
 
@@ -32,6 +38,9 @@ buzz eval
 buzz sources --manifest examples/osana/manifest.yaml
 buzz preflight <task_id> --manifest examples/osana/manifest.yaml
 buzz handoff <task_id>
+buzz blocked
+buzz stale --manifest examples/liara/manifest.yaml
+buzz pending-approvals
 buzz briefing
 ```
 
@@ -62,6 +71,10 @@ fallback automático. O provider recebe somente os documentos selecionados pelo 
 `buzz eval` executa os fixtures oficiais de Osana e Liara sem persistir tasks, runs ou handoffs.
 Ele valida classificação, fontes, provider e handoff; use `--fixture` para executar apenas um
 caso e `--provider ollama` para selecionar Ollama explicitamente.
+
+Os comandos `status`, `blocked`, `stale`, `pending-approvals` e `briefing` leem somente o estado
+local já existente. Eles não criam `.buzz`, não chamam providers e organizam as próximas ações
+em `must_do`, `unblock`, `delegate`, `waiting` e `watch`.
 
 ## Documentação
 

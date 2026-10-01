@@ -24,13 +24,14 @@ class LocalTaskStore:
 class LocalBuzzStore:
     """Local adapter for Buzz state, with an append-only execution trail."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, create: bool = True) -> None:
         self.root = root / ".buzz"
         self.tasks_root = self.root / "tasks"
         self.runs_root = self.root / "runs"
         self.handoffs_root = self.root / "handoffs"
-        for directory in (self.tasks_root, self.runs_root, self.handoffs_root):
-            directory.mkdir(parents=True, exist_ok=True)
+        if create:
+            for directory in (self.tasks_root, self.runs_root, self.handoffs_root):
+                directory.mkdir(parents=True, exist_ok=True)
         self.events_path = self.root / "events.jsonl"
 
     def save(self, task: Task) -> None:
@@ -56,6 +57,9 @@ class LocalBuzzStore:
         path = self.runs_root / f"{run_id}.json"
         return json.loads(path.read_text()) if path.exists() else None
 
+    def list_runs(self) -> list[dict[str, Any]]:
+        return [json.loads(path.read_text()) for path in sorted(self.runs_root.glob("*.json"))]
+
     def save_handoff(self, handoff: Handoff) -> None:
         handoff.validate()
         path = self.handoffs_root / f"{handoff.handoff_id}.json"
@@ -67,6 +71,9 @@ class LocalBuzzStore:
             if handoff["task_id"] == task_id:
                 return handoff
         return None
+
+    def list_handoffs(self) -> list[dict[str, Any]]:
+        return [json.loads(path.read_text()) for path in sorted(self.handoffs_root.glob("*.json"))]
 
     def append_event(self, event: Event) -> None:
         event.validate()

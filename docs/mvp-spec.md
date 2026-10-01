@@ -1,5 +1,9 @@
 # Buzz MVP specification
 
+> Neste documento, “Buzz” é o sistema de orquestração da Adventure, não “buzz” no sentido de
+> marketing, hype, tendência ou zum-zum. O produto existe para reduzir ruído e organizar sinal,
+> contexto, decisões e handoffs.
+
 ## Objective
 
 Validate an end-to-end, local-first flow where Buzz receives a natural-language demand,

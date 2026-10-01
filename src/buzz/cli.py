@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .briefing import build_briefing, build_status
 from .evals import EvalError, evaluate_fixture, evaluate_paths
 from .models import Event, Run, Task, now_iso
 from .providers import ProviderContractError, ProviderRouter, ProviderUnavailable, provider_config, provider_inventory
@@ -24,8 +25,16 @@ def _parser() -> argparse.ArgumentParser:
 
     sub.add_parser("doctor", help="check local runtime capabilities")
     sub.add_parser("providers", help="show local model provider capabilities")
-    sub.add_parser("status", help="show local task state")
-    sub.add_parser("briefing", help="show a local operational briefing")
+    status = sub.add_parser("status", help="show local task state")
+    status.add_argument("--manifest", type=Path, action="append", help="local manifest to inspect")
+    blocked = sub.add_parser("blocked", help="show blocked tasks and failed runs")
+    blocked.add_argument("--manifest", type=Path, action="append", help="local manifest to inspect")
+    stale = sub.add_parser("stale", help="show tasks using non-ready sources")
+    stale.add_argument("--manifest", type=Path, action="append", help="local manifest to inspect")
+    approvals = sub.add_parser("pending-approvals", help="show handoffs awaiting approval")
+    approvals.add_argument("--manifest", type=Path, action="append", help="local manifest to inspect")
+    briefing = sub.add_parser("briefing", help="show a local operational briefing")
+    briefing.add_argument("--manifest", type=Path, action="append", help="local manifest to inspect")
 
     sources = sub.add_parser("sources", help="show configured source status")
     sources.add_argument("--manifest", type=Path, default=Path("examples/osana/manifest.yaml"))
@@ -110,7 +119,8 @@ def main() -> None:
             raise SystemExit(1)
         return
 
-    store = LocalBuzzStore(root)
+    read_only = args.command in {"status", "blocked", "stale", "pending-approvals", "briefing"}
+    store = LocalBuzzStore(root, create=not read_only)
 
     if args.command == "sources":
         registry = SourceRegistry.from_manifest(args.manifest)
@@ -228,13 +238,19 @@ def main() -> None:
         print(json.dumps(output, indent=2, ensure_ascii=False))
         return
 
-    if args.command == "status":
-        print(json.dumps(store.list(), indent=2, ensure_ascii=False))
-        return
-
-    if args.command == "briefing":
-        tasks = store.list()
-        print(json.dumps({"must_do": [], "unblock": [], "delegate": [], "waiting": [], "watch": tasks}, indent=2, ensure_ascii=False))
+    if args.command in {"status", "blocked", "stale", "pending-approvals", "briefing"}:
+        manifests = args.manifest if hasattr(args, "manifest") and args.manifest else sorted((root / "examples").glob("*/manifest.yaml"))
+        if args.command == "status":
+            output = build_status(store, manifests=manifests)
+        elif args.command == "blocked":
+            output = {"blocked": build_briefing(store, manifests=manifests)["unblock"]}
+        elif args.command == "stale":
+            output = {"stale": build_status(store, manifests=manifests)["stale"]}
+        elif args.command == "pending-approvals":
+            output = {"pending_approvals": build_briefing(store, manifests=manifests)["must_do"]}
+        else:
+            output = build_briefing(store, manifests=manifests)
+        print(json.dumps(output, indent=2, ensure_ascii=False))
         return
 
     _parser().print_help()

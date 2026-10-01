@@ -116,6 +116,8 @@ Critério de saída: uma regressão de roteamento ou contexto é detectável em 
 
 ### Fase 7 — briefing operacional
 
+- Status: concluída no primeiro briefing operacional local.
+
 - `buzz status`;
 - `buzz blocked`;
 - `buzz stale`;
