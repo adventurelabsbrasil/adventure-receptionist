@@ -1,0 +1,48 @@
+# Adventure Receptionist
+
+`adventure-receptionist` é o núcleo inicial do Adventure Agent Orchestration Control Plane.
+`buzz` é a persona e o comando de entrada.
+
+O MVP é local-first, model-agnostic e read-only por padrão. Ele valida o fluxo de intake,
+triagem, contexto explícito, handoff e observabilidade antes de adicionar conectores externos.
+
+## Desenvolvimento local
+
+```bash
+uv sync
+uv run buzz --help
+uv run buzz doctor
+uv run buzz init --scope project
+```
+
+Também é possível usar o pacote sem `uv`:
+
+```bash
+python -m buzz --help
+```
+
+## Primeiro fluxo Osana
+
+```bash
+buzz init --scope project
+buzz intake --text "Diagnosticar o que falta para finalizar o Osana"
+buzz triage --fixture evals/osana/diagnose-readiness.json
+buzz briefing
+```
+
+O protótipo não autentica, não consulta GitHub e não executa escrita externa.
+
+## Documentação
+
+- [MVP specification](docs/mvp-spec.md)
+- [Architecture](docs/architecture.md)
+- [Implementation plan](docs/implementation-plan.md)
+
+## Princípios
+
+- contexto explícito e mínimo;
+- fontes com autoridade, frescura e proveniência;
+- saída estruturada antes de qualquer handoff;
+- políticas e permissões controladas por código;
+- incerteza material sempre marcada;
+- qualquer efeito externo exige preview e aprovação.

@@ -1,0 +1,32 @@
+# Buzz MVP specification
+
+## Objective
+
+Validate an end-to-end, local-first flow where Buzz receives a natural-language demand,
+classifies it, selects explicit context, produces a structured handoff and leaves a trace.
+
+## First scenario
+
+Diagnose what is missing to finish Osana and prepare real-world validation with Graciano,
+Salvador Autocenter, referred by Gustavo Rosa. This is planning/diagnosis only: no contact,
+production change, live GitHub write or external side effect.
+
+## Runtime rules
+
+- deterministic code owns state, policy, context and permissions;
+- LLMs interpret, classify and synthesize within validated schemas;
+- local fixture is the initial source adapter;
+- stale or unavailable sources are never silently substituted;
+- material uncertainty is explicit;
+- external writes require preview, approval, execute, reread and verify.
+
+## MVP acceptance
+
+Given the Osana fixture and a natural-language objective, Buzz must produce within three intake
+rounds a provisional classification, scoped context refs, complexity, executor profile,
+uncertainties, next actions and a human-review handoff.
+
+## Deliberately deferred
+
+Live GitHub connector, authentication orchestration, MCP runtime, RAG/vector storage,
+remote database, multi-user login, OpenClaw, LangGraph, LangChain and external telemetry.

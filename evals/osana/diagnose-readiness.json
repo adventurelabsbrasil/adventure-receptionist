@@ -1,0 +1,23 @@
+{
+  "name": "osana-diagnose-readiness",
+  "input": "Diagnosticar o que falta para finalizar o Osana e preparar a validação com Salvador Autocenter.",
+  "context_refs": [
+    "project:osana",
+    "source:osana-map-snapshot",
+    "engagement:salvador-autocenter-pilot"
+  ],
+  "constraints": {
+    "external_writes": false,
+    "max_intake_rounds": 3,
+    "source_mode": "local_fixture"
+  },
+  "expected": {
+    "project_id": "osana",
+    "entity_type": "product",
+    "client_relation": "client_engagement",
+    "complexity": "high",
+    "executor_profile": "software-diagnostic-specialist",
+    "autonomy_level": "propose",
+    "material_uncertainties": true
+  }
+}

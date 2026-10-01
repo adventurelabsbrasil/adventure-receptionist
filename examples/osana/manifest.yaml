@@ -1,0 +1,19 @@
+profile: adventure
+project:
+  id: osana
+  type: product
+  ownership: adventure
+  lifecycle: pilot
+context_policy: explicit_allowlist
+sources:
+  - id: osana-map-snapshot
+    type: github_issue_snapshot
+    authority: product_map
+    status: snapshot
+    access: read_only
+  - id: salvador-autocenter-pilot
+    type: client_engagement
+    authority: validation_context
+    status: active
+    access: local_only
+external_writes: false
