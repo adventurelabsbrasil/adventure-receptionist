@@ -6,11 +6,11 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .models import Event, Run, Task
-from .providers import provider_inventory
+from .models import Event, Run, Task, now_iso
+from .providers import ProviderConfig, ProviderContractError, ProviderRouter, ProviderUnavailable, provider_config, provider_inventory
 from .store import LocalBuzzStore
 from .sources import PreflightBlocked, SourceRegistry
-from .triage import handoff_from_triage, triage_fixture
+from .triage import handoff_from_triage, synthesize_triage, triage_fixture
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -46,6 +46,7 @@ def _parser() -> argparse.ArgumentParser:
     triage = sub.add_parser("triage", help="run a local project triage fixture")
     triage.add_argument("--fixture", type=Path, required=True)
     triage.add_argument("--manifest", type=Path, help="manifest for the fixture project")
+    triage.add_argument("--provider", choices=["deterministic", "ollama"], help="provider override")
     return parser
 
 
@@ -95,7 +96,7 @@ def main() -> None:
     if args.command == "triage":
         fixture = json.loads(args.fixture.read_text())
         task = Task.new(fixture["input"])
-        run = Run(run_id=f"run-{task.task_id.removeprefix('task-')}", task_id=task.task_id, status="completed")
+        run = Run(run_id=f"run-{task.task_id.removeprefix('task-')}", task_id=task.task_id)
         store.save(task)
         store.save_run(run)
         store.append_event(Event.new("task.captured", run.run_id, task_id=task.task_id, payload={"objective": task.objective}))
@@ -105,9 +106,45 @@ def main() -> None:
         try:
             context_pack = registry.preflight(task, result.context_refs)
         except PreflightBlocked as error:
+            run.status = "failed"
+            run.validation_result = "blocked_preflight"
+            run.finished_at = now_iso()
+            store.save_run(run)
             store.append_event(Event.new("source.preflight_blocked", run.run_id, task_id=task.task_id, payload={"reason": str(error)}))
             print(json.dumps({"error": str(error), "task_id": task.task_id}, indent=2, ensure_ascii=False), file=sys.stderr)
             raise SystemExit(2)
+        config = provider_config(registry.provider if hasattr(registry, "provider") else None)
+        router = ProviderRouter(config)
+        try:
+            selected_provider = router.select(args.provider)
+            result, telemetry = synthesize_triage(
+                result,
+                context_pack,
+                selected_provider,
+                objective=task.objective,
+                max_output_tokens=config.max_output_tokens,
+            )
+        except (ProviderContractError, ProviderUnavailable) as error:
+            run.status = "failed"
+            run.provider = args.provider or config.name
+            run.model = config.model or ("llama3.2" if (args.provider or config.name) == "ollama" else "rules-v1")
+            run.validation_result = "failed"
+            run.finished_at = now_iso()
+            store.save_run(run)
+            store.append_event(Event.new("provider.failed", run.run_id, task_id=task.task_id, payload={"reason": str(error)}))
+            print(json.dumps({"error": str(error), "task_id": task.task_id}, indent=2, ensure_ascii=False), file=sys.stderr)
+            raise SystemExit(2)
+        run.provider = telemetry["provider"]
+        run.model = telemetry["model"]
+        run.input_tokens = telemetry["input_tokens"]
+        run.output_tokens = telemetry["output_tokens"]
+        run.latency_ms = telemetry["latency_ms"]
+        run.source_snapshot_ids = context_pack.source_ids
+        run.validation_result = telemetry["validation_result"]
+        run.status = "completed"
+        run.finished_at = now_iso()
+        store.save_run(run)
+        store.append_event(Event.new("provider.completed", run.run_id, task_id=task.task_id, payload={**telemetry, "source_ids": context_pack.source_ids}))
         handoff = handoff_from_triage(task, result, context_pack)
         store.save_handoff(handoff)
         task.project_id = result.project_id

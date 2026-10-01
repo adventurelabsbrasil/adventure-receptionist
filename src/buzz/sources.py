@@ -17,11 +17,16 @@ class SourceRegistry:
     context_policy: str
     sources: dict[str, Source]
     external_writes: bool = False
+    provider: dict[str, Any] | None = None
+    workspace: Path | None = None
+    source_paths: dict[str, Path] | None = None
 
     @classmethod
     def from_manifest(cls, path: Path) -> "SourceRegistry":
         data = _parse_manifest(path)
         sources = {}
+        source_paths: dict[str, Path] = {}
+        workspace = path.resolve().parent
         for raw in data.get("sources", []):
             source = Source(
                 source_id=raw["id"],
@@ -32,11 +37,25 @@ class SourceRegistry:
             )
             source.validate()
             sources[source.source_id] = source
+            if raw.get("path"):
+                source_path = (workspace / str(raw["path"])).resolve()
+                try:
+                    source_path.relative_to(workspace)
+                except ValueError as exc:
+                    raise PreflightBlocked(
+                        f"Source {source.source_id} is outside the manifest workspace"
+                    ) from exc
+                if not source_path.is_file():
+                    raise PreflightBlocked(f"Source {source.source_id} file does not exist: {raw['path']}")
+                source_paths[source.source_id] = source_path
         return cls(
             project=data.get("project", {}),
             context_policy=data.get("context_policy", "explicit_allowlist"),
             sources=sources,
             external_writes=data.get("external_writes", False),
+            provider=data.get("provider"),
+            workspace=workspace,
+            source_paths=source_paths,
         )
 
     def preflight(
@@ -56,21 +75,31 @@ class SourceRegistry:
         if unknown:
             raise PreflightBlocked(f"Sources outside manifest allowlist: {', '.join(unknown)}")
 
-        material = set(material_source_ids or source_ids)
         blocked = [
             source_id
-            for source_id in material
+            for source_id in source_ids
             if source_id not in self.sources
             or self.sources[source_id].status in {"stale", "deprecated", "partial", "unavailable"}
         ]
         if blocked:
             raise PreflightBlocked(f"Material sources are not decision-ready: {', '.join(sorted(blocked))}")
 
+        missing_paths = [source_id for source_id in source_ids if self.sources[source_id].source_id not in (self.source_paths or {})]
+        if missing_paths and any(source_id.startswith("liara-") for source_id in missing_paths):
+            raise PreflightBlocked(f"Sources lack an explicitly permitted snapshot path: {', '.join(missing_paths)}")
+
+        documents = {
+            source_id: path.read_text()
+            for source_id, path in (self.source_paths or {}).items()
+            if source_id in source_ids
+        }
+
         return ContextPack(
             task_id=task.task_id,
             context_refs=context_refs,
             source_ids=source_ids,
             constraints={"external_writes": self.external_writes},
+            documents=documents,
         )
 
     def summary(self) -> list[dict[str, Any]]:
@@ -81,6 +110,7 @@ class SourceRegistry:
                 "authority": source.authority,
                 "status": source.status,
                 "access": source.access,
+                **({"path": str((self.source_paths or {})[source.source_id])} if source.source_id in (self.source_paths or {}) else {}),
             }
             for source in self.sources.values()
         ]
@@ -126,8 +156,10 @@ def _parse_manifest(path: Path) -> dict[str, Any]:
         if value:
             if current is not None and section == "sources":
                 current[key] = _scalar(value)
-            elif section == "project":
-                data["project"][key] = _scalar(value)
+            elif section in {"project", "provider"}:
+                data[section][key] = _scalar(value)
+            elif section:
+                data[section][key] = _scalar(value)
             else:
                 data[key] = _scalar(value)
         else:

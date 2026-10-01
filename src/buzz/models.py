@@ -114,6 +114,7 @@ class ContextPack:
     context_refs: list[str]
     source_ids: list[str]
     constraints: dict[str, Any] = field(default_factory=dict)
+    documents: dict[str, str] = field(default_factory=dict)
     uncertainty_policy: str = "material_only"
 
     def validate(self) -> None:
@@ -121,6 +122,8 @@ class ContextPack:
             raise ValueError("ContextPack requires task_id")
         if not self.context_refs and not self.source_ids:
             raise ValueError("ContextPack requires at least one context or source reference")
+        if any(source_id not in self.source_ids for source_id in self.documents):
+            raise ValueError("ContextPack documents must belong to selected sources")
 
 
 @dataclass
@@ -172,6 +175,10 @@ class Run:
     provider: str | None = None
     model: str | None = None
     source_snapshot_ids: list[str] = field(default_factory=list)
+    input_tokens: int = 0
+    output_tokens: int = 0
+    latency_ms: int = 0
+    validation_result: str | None = None
     idempotency_key: str | None = None
     started_at: str = field(default_factory=now_iso)
     finished_at: str | None = None

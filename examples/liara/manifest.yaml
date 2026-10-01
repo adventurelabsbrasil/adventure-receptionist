@@ -6,20 +6,28 @@ project:
   lifecycle: active
   purpose: internal_marketing_operations
 context_policy: explicit_allowlist
+provider:
+  name: deterministic
+  model: rules-v1
+  timeout_seconds: 10
+  max_output_tokens: 1200
 sources:
   - id: liara-canon-snapshot
     type: ssot_agent_snapshot
     authority: agent_scope
     status: snapshot
     access: local_only
+    path: snapshots/liara-canon.md
   - id: liara-runtime-snapshot
     type: runtime_code_snapshot
     authority: implementation
     status: snapshot
     access: local_only
+    path: snapshots/liara-runtime.md
   - id: liara-data-model-snapshot
     type: database_schema_snapshot
     authority: audit_and_state_model
     status: snapshot
     access: local_only
+    path: snapshots/liara-data-model.md
 external_writes: false

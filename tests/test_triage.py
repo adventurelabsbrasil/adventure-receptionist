@@ -2,7 +2,11 @@ import json
 from pathlib import Path
 
 from buzz.models import Task
-from buzz.triage import triage_fixture, triage_osana
+import pytest
+
+from buzz.providers import DeterministicProvider, ModelResponse, ProviderContractError
+from buzz.sources import SourceRegistry
+from buzz.triage import synthesize_triage, triage_fixture, triage_osana
 
 
 def test_osana_fixture_produces_scoped_handoff():
@@ -32,3 +36,33 @@ def test_liara_fixture_separates_internal_agent_from_product_project():
     assert result.autonomy_level == "propose"
     assert result.context_refs == fixture["context_refs"]
     assert result.material_uncertainties
+
+
+def test_triage_synthesis_receives_only_context_pack_documents():
+    root = Path(__file__).parents[1]
+    fixture = json.loads((root / "evals/liara/diagnose-readiness.json").read_text())
+    result = triage_fixture(Task.new(fixture["input"]), fixture)
+    registry = SourceRegistry.from_manifest(root / "examples/liara/manifest.yaml")
+    pack = registry.preflight(Task.new("same task"), ["source:liara-canon-snapshot"])
+
+    synthesized, telemetry = synthesize_triage(result, pack, DeterministicProvider())
+
+    assert synthesized.project_id == "liara"
+    assert telemetry["validation_result"] == "valid"
+    assert set(pack.documents) == {"liara-canon-snapshot"}
+
+
+def test_invalid_provider_synthesis_blocks_handoff():
+    class InvalidProvider:
+        def complete(self, _request):
+            return ModelResponse("fake", "test", {"findings": []})
+
+    root = Path(__file__).parents[1]
+    fixture = json.loads((root / "evals/liara/diagnose-readiness.json").read_text())
+    result = triage_fixture(Task.new(fixture["input"]), fixture)
+    pack = SourceRegistry.from_manifest(root / "examples/liara/manifest.yaml").preflight(
+        Task.new("same task"), ["source:liara-canon-snapshot"]
+    )
+
+    with pytest.raises(ProviderContractError, match="exactly findings"):
+        synthesize_triage(result, pack, InvalidProvider())

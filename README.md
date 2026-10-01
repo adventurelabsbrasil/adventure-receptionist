@@ -40,6 +40,10 @@ Segundo caso, Liara como produto interno da Adventure:
 buzz triage \
   --fixture evals/liara/diagnose-readiness.json \
   --manifest examples/liara/manifest.yaml
+buzz triage \
+  --fixture evals/liara/diagnose-readiness.json \
+  --manifest examples/liara/manifest.yaml \
+  --provider ollama
 buzz sources --manifest examples/liara/manifest.yaml
 ```
 
@@ -51,7 +55,8 @@ somente as fontes explicitamente declaradas no manifesto e bloqueia fontes mater
 deprecated, parciais ou indisponíveis.
 
 `buzz providers` mostra capacidades locais sem autenticar ou enviar contexto. O provider
-determinístico existe para testes offline; Ollama será conectado em um adapter posterior.
+determinístico é o padrão offline; Ollama é uma opção explícita e, se indisponível, falha sem
+fallback automático. O provider recebe somente os documentos selecionados pelo preflight.
 
 ## Documentação
 
