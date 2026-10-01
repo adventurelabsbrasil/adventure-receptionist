@@ -11,6 +11,7 @@ sources:
     authority: product_map
     status: snapshot
     access: read_only
+    path: snapshots/github.json
   - id: salvador-autocenter-pilot
     type: client_engagement
     authority: validation_context

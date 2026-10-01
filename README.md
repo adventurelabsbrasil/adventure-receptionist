@@ -78,6 +78,11 @@ autenticação e leitura via `GET`; para integrar o resultado ao contexto, infor
 `--manifest` e uma fonte allowlisted com `--source`. `--snapshot` permite validar o mesmo fluxo
 offline sem chamar GitHub.
 
+O manifesto de Osana aponta para `examples/osana/snapshots/github.json`, uma fotografia
+provisória e limitada ao repositório `adventurelabsbrasil/osana-aaas`. Ela não representa o MAP
+canônico nem o estado live; outros repositórios ou contextos relacionados à Osana precisam ser
+confirmados antes de serem adicionados ao contexto do Buzz.
+
 Os comandos `status`, `blocked`, `stale`, `pending-approvals` e `briefing` leem somente o estado
 local já existente. Eles não criam `.buzz`, não chamam providers e organizam as próximas ações
 em `must_do`, `unblock`, `delegate`, `waiting` e `watch`.

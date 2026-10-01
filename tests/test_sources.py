@@ -7,10 +7,24 @@ from buzz.sources import PreflightBlocked, SourceRegistry
 
 
 def test_manifest_registry_reads_project_and_sources():
-    registry = SourceRegistry.from_manifest(Path(__file__).parents[1] / "examples/osana/manifest.yaml")
+    root = Path(__file__).parents[1]
+    registry = SourceRegistry.from_manifest(root / "examples/osana/manifest.yaml")
     assert registry.project["id"] == "osana"
     assert registry.sources["osana-map-snapshot"].status == "snapshot"
+    assert registry.source_paths["osana-map-snapshot"] == (
+        root / "examples/osana/snapshots/github.json"
+    ).resolve()
     assert registry.external_writes is False
+
+
+def test_osana_snapshot_declares_limited_repository_coverage():
+    root = Path(__file__).parents[1]
+    registry = SourceRegistry.from_manifest(root / "examples/osana/manifest.yaml")
+    context = registry.preflight(Task.new("Diagnose Osana"), ["source:osana-map-snapshot"])
+
+    assert '"project_id": "osana"' in context.documents["osana-map-snapshot"]
+    assert '"provisional": true' in context.documents["osana-map-snapshot"]
+    assert "somente o repositório listado" in context.documents["osana-map-snapshot"]
 
 
 def test_manifest_registry_reads_internal_liara_project():

@@ -1,0 +1,13 @@
+{
+  "repository": "adventurelabsbrasil/osana-aaas",
+  "project_id": "osana",
+  "related_repositories": [
+    "adventurelabsbrasil/osana-aaas"
+  ],
+  "related_repository_note": "Osana pode aparecer em mais de um repositório ou contexto; esta fotografia cobre somente o repositório listado.",
+  "mode": "snapshot",
+  "coverage": "open",
+  "provisional": true,
+  "source_note": "Provisional read-only snapshot; not the canonical Osana MAP and not live state.",
+  "items": []
+}
