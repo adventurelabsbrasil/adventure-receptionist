@@ -28,6 +28,7 @@ python -m buzz --help
 buzz init --scope project
 buzz intake --text "Diagnosticar o que falta para finalizar o Osana"
 buzz triage --fixture evals/osana/diagnose-readiness.json
+buzz eval
 buzz sources --manifest examples/osana/manifest.yaml
 buzz preflight <task_id> --manifest examples/osana/manifest.yaml
 buzz handoff <task_id>
@@ -57,6 +58,10 @@ deprecated, parciais ou indisponíveis.
 `buzz providers` mostra capacidades locais sem autenticar ou enviar contexto. O provider
 determinístico é o padrão offline; Ollama é uma opção explícita e, se indisponível, falha sem
 fallback automático. O provider recebe somente os documentos selecionados pelo preflight.
+
+`buzz eval` executa os fixtures oficiais de Osana e Liara sem persistir tasks, runs ou handoffs.
+Ele valida classificação, fontes, provider e handoff; use `--fixture` para executar apenas um
+caso e `--provider ollama` para selecionar Ollama explicitamente.
 
 ## Documentação
 

@@ -6,8 +6,9 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .evals import EvalError, evaluate_fixture, evaluate_paths
 from .models import Event, Run, Task, now_iso
-from .providers import ProviderConfig, ProviderContractError, ProviderRouter, ProviderUnavailable, provider_config, provider_inventory
+from .providers import ProviderContractError, ProviderRouter, ProviderUnavailable, provider_config, provider_inventory
 from .store import LocalBuzzStore
 from .sources import PreflightBlocked, SourceRegistry
 from .triage import handoff_from_triage, synthesize_triage, triage_fixture
@@ -47,6 +48,11 @@ def _parser() -> argparse.ArgumentParser:
     triage.add_argument("--fixture", type=Path, required=True)
     triage.add_argument("--manifest", type=Path, help="manifest for the fixture project")
     triage.add_argument("--provider", choices=["deterministic", "ollama"], help="provider override")
+
+    evaluation = sub.add_parser("eval", help="evaluate Buzz fixtures without persisting state")
+    evaluation.add_argument("--fixture", type=Path, action="append", help="fixture to evaluate; defaults to Osana and Liara")
+    evaluation.add_argument("--manifest", type=Path, help="manifest for a single fixture")
+    evaluation.add_argument("--provider", choices=["deterministic", "ollama"], help="provider override")
     return parser
 
 
@@ -75,6 +81,33 @@ def main() -> None:
 
     if args.command == "providers":
         print(json.dumps(provider_inventory(), indent=2, ensure_ascii=False))
+        return
+
+    if args.command == "eval":
+        fixture_paths = args.fixture or [
+            root / "evals/osana/diagnose-readiness.json",
+            root / "evals/liara/diagnose-readiness.json",
+        ]
+        if args.manifest and len(fixture_paths) != 1:
+            print(json.dumps({"error": "--manifest requires exactly one --fixture"}, ensure_ascii=False), file=sys.stderr)
+            raise SystemExit(2)
+        provider = None
+        if args.provider:
+            manifest_path = args.manifest or root / "examples" / json.loads(fixture_paths[0].read_text())["project_id"] / "manifest.yaml"
+            registry = SourceRegistry.from_manifest(manifest_path)
+            provider = ProviderRouter(provider_config(registry.provider)).select(args.provider)
+        try:
+            if args.manifest:
+                reports = [evaluate_fixture(fixture_paths[0], provider, manifest=args.manifest)]
+            else:
+                reports = evaluate_paths(fixture_paths, provider)
+        except EvalError as error:
+            print(json.dumps({"error": str(error)}, indent=2, ensure_ascii=False), file=sys.stderr)
+            raise SystemExit(2)
+        output = {"passed": all(report.passed for report in reports), "reports": [report.to_dict() for report in reports]}
+        print(json.dumps(output, indent=2, ensure_ascii=False))
+        if not output["passed"]:
+            raise SystemExit(1)
         return
 
     store = LocalBuzzStore(root)
