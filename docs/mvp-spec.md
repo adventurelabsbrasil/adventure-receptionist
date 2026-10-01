@@ -42,5 +42,5 @@ project from the related agent entity and explicitly reporting snapshot-only unc
 
 ## Deliberately deferred
 
-Live GitHub connector, authentication orchestration, MCP runtime, RAG/vector storage,
+GitHub writes, authentication orchestration beyond the local `gh` CLI, MCP runtime, RAG/vector storage,
 remote database, multi-user login, OpenClaw, LangGraph, LangChain and external telemetry.

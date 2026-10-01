@@ -8,6 +8,7 @@ from pathlib import Path
 from . import __version__
 from .briefing import build_briefing, build_status
 from .evals import EvalError, evaluate_fixture, evaluate_paths
+from .github import GitHubReadClient, GitHubReadError
 from .models import Event, Run, Task, now_iso
 from .providers import ProviderContractError, ProviderRouter, ProviderUnavailable, provider_config, provider_inventory
 from .store import LocalBuzzStore
@@ -25,6 +26,12 @@ def _parser() -> argparse.ArgumentParser:
 
     sub.add_parser("doctor", help="check local runtime capabilities")
     sub.add_parser("providers", help="show local model provider capabilities")
+    github = sub.add_parser("github-read", help="read GitHub issues and pull requests without writing")
+    github.add_argument("--repo", required=True, help="GitHub repository in OWNER/REPOSITORY format")
+    github.add_argument("--state", choices=["open", "closed", "all"], default="open")
+    github.add_argument("--snapshot", type=Path, help="read a local GitHub snapshot instead of gh")
+    github.add_argument("--manifest", type=Path, help="manifest that allowlists the context source")
+    github.add_argument("--source", dest="source_ref", help="allowlisted source reference")
     status = sub.add_parser("status", help="show local task state")
     status.add_argument("--manifest", type=Path, action="append", help="local manifest to inspect")
     blocked = sub.add_parser("blocked", help="show blocked tasks and failed runs")
@@ -92,6 +99,31 @@ def main() -> None:
         print(json.dumps(provider_inventory(), indent=2, ensure_ascii=False))
         return
 
+    if args.command == "github-read":
+        if bool(args.manifest) != bool(args.source_ref):
+            print(json.dumps({"error": "--manifest and --source must be provided together"}, ensure_ascii=False), file=sys.stderr)
+            raise SystemExit(2)
+        try:
+            client = GitHubReadClient()
+            if args.manifest:
+                registry = SourceRegistry.from_manifest(args.manifest)
+                context = client.read_context(
+                    Task.new(f"Read GitHub context for {args.repo}"),
+                    registry,
+                    args.source_ref,
+                    args.repo,
+                    state=args.state,
+                    snapshot_path=args.snapshot,
+                )
+                output = {"mode": context.constraints["source_mode"], "context_pack": context.__dict__}
+            else:
+                output = client.read(args.repo, state=args.state, snapshot_path=args.snapshot).to_dict()
+        except (GitHubReadError, PreflightBlocked, ValueError) as error:
+            print(json.dumps({"error": str(error)}, indent=2, ensure_ascii=False), file=sys.stderr)
+            raise SystemExit(2)
+        print(json.dumps(output, indent=2, ensure_ascii=False))
+        return
+
     if args.command == "eval":
         fixture_paths = args.fixture or [
             root / "evals/osana/diagnose-readiness.json",
@@ -119,7 +151,7 @@ def main() -> None:
             raise SystemExit(1)
         return
 
-    read_only = args.command in {"status", "blocked", "stale", "pending-approvals", "briefing"}
+    read_only = args.command in {"status", "blocked", "stale", "pending-approvals", "briefing", "github-read"}
     store = LocalBuzzStore(root, create=not read_only)
 
     if args.command == "sources":

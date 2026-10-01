@@ -19,6 +19,7 @@ uv sync
 uv run buzz --help
 uv run buzz doctor
 uv run buzz providers
+uv run buzz github-read --repo OWNER/REPOSITORY --snapshot path/to/github.json
 uv run buzz init --scope project
 ```
 
@@ -60,8 +61,8 @@ buzz sources --manifest examples/liara/manifest.yaml
 Osana permanece como o caso principal; Liara verifica se o mesmo pipeline separa produto,
 agente, runtime, dependências externas e estado confirmado por snapshot.
 
-O protótipo não autentica, não consulta GitHub e não executa escrita externa. O preflight usa
-somente as fontes explicitamente declaradas no manifesto e bloqueia fontes materialmente stale,
+O protótipo não executa escrita externa. O connector GitHub só é acionado explicitamente por
+`github-read`; o preflight usa somente as fontes explicitamente declaradas no manifesto e bloqueia fontes materialmente stale,
 deprecated, parciais ou indisponíveis.
 
 `buzz providers` mostra capacidades locais sem autenticar ou enviar contexto. O provider
@@ -71,6 +72,11 @@ fallback automático. O provider recebe somente os documentos selecionados pelo 
 `buzz eval` executa os fixtures oficiais de Osana e Liara sem persistir tasks, runs ou handoffs.
 Ele valida classificação, fontes, provider e handoff; use `--fixture` para executar apenas um
 caso e `--provider ollama` para selecionar Ollama explicitamente.
+
+O connector GitHub é explicitamente read-only. `buzz github-read` usa `gh` somente para
+autenticação e leitura via `GET`; para integrar o resultado ao contexto, informe também um
+`--manifest` e uma fonte allowlisted com `--source`. `--snapshot` permite validar o mesmo fluxo
+offline sem chamar GitHub.
 
 Os comandos `status`, `blocked`, `stale`, `pending-approvals` e `briefing` leem somente o estado
 local já existente. Eles não criam `.buzz`, não chamam providers e organizam as próximas ações

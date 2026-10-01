@@ -110,5 +110,5 @@ SSOT geral e outros projetos não entram automaticamente.
 
 ## 7. Fora do MVP
 
-OpenClaw, live GitHub connector, login multiusuário, MCP runtime, RAG/vector DB, LangGraph,
+OpenClaw, GitHub write connector, login multiusuário, MCP runtime, RAG/vector DB, LangGraph,
 LangChain, A2A, dashboard web, banco remoto, telemetria externa e execução externa.

@@ -130,6 +130,8 @@ Critério de saída: o usuário recebe próximas ações explicadas, não apenas
 
 ### Fase 8 — primeiro connector externo
 
+- Status: concluída no primeiro adapter GitHub read-only.
+
 - GitHub read-only;
 - verificação de autenticação via `gh` sem expor token;
 - snapshot e live read claramente diferenciados;
@@ -160,7 +162,7 @@ Não iniciar Fase 8 antes de o preflight de fontes e a observabilidade local est
 - o eval passa com fixture conhecida;
 - não há segredo em arquivos versionáveis;
 - macOS é validado e CI está preparado para Linux/Windows;
-- GitHub live e efeitos externos continuam bloqueados.
+- Escritas GitHub e demais efeitos externos continuam bloqueados.
 
 ## Decisões adiadas
 
