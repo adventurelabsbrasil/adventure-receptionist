@@ -41,6 +41,12 @@ class LocalBuzzStore:
     def list(self) -> list[dict[str, Any]]:
         return [json.loads(path.read_text()) for path in sorted(self.tasks_root.glob("*.json"))]
 
+    def get_task(self, task_id: str) -> Task | None:
+        path = self.tasks_root / f"{task_id}.json"
+        if not path.exists():
+            return None
+        return Task(**json.loads(path.read_text()))
+
     def save_run(self, run: Run) -> None:
         run.validate()
         path = self.runs_root / f"{run.run_id}.json"
@@ -54,6 +60,13 @@ class LocalBuzzStore:
         handoff.validate()
         path = self.handoffs_root / f"{handoff.handoff_id}.json"
         path.write_text(json.dumps(asdict(handoff), indent=2, ensure_ascii=False) + "\n")
+
+    def get_handoff(self, task_id: str) -> dict[str, Any] | None:
+        for path in sorted(self.handoffs_root.glob("*.json")):
+            handoff = json.loads(path.read_text())
+            if handoff["task_id"] == task_id:
+                return handoff
+        return None
 
     def append_event(self, event: Event) -> None:
         event.validate()

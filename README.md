@@ -27,10 +27,15 @@ python -m buzz --help
 buzz init --scope project
 buzz intake --text "Diagnosticar o que falta para finalizar o Osana"
 buzz triage --fixture evals/osana/diagnose-readiness.json
+buzz sources --manifest examples/osana/manifest.yaml
+buzz preflight <task_id> --manifest examples/osana/manifest.yaml
+buzz handoff <task_id>
 buzz briefing
 ```
 
-O protótipo não autentica, não consulta GitHub e não executa escrita externa.
+O protótipo não autentica, não consulta GitHub e não executa escrita externa. O preflight usa
+somente as fontes explicitamente declaradas no manifesto e bloqueia fontes materialmente stale,
+deprecated, parciais ou indisponíveis.
 
 ## Documentação
 

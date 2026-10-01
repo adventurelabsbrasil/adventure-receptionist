@@ -48,6 +48,8 @@ trace local ordenado.
 
 ### Fase 2 — intake e triagem
 
+Status: concluída no primeiro fluxo local Osana.
+
 - intake natural ou por CLI;
 - limite de três rodadas;
 - classificação de entidade, ownership, purpose, lifecycle e client relation;
@@ -60,13 +62,16 @@ Critério de saída: fixture Osana produz classificação provisória sem invent
 
 ### Fase 3 — contexto e fontes
 
+Status: concluída no primeiro registry local Osana.
+
 - `SourceRegistry` local;
 - manifesto de projeto;
 - allowlist de fontes;
 - status `verified`, `stale`, `deprecated`, `partial` e `unavailable`;
 - preflight antes do raciocínio;
 - snapshot local do MAP;
-- bloqueio quando fonte material não está disponível.
+- bloqueio quando fonte material não está disponível;
+- comandos locais `sources`, `preflight` e `handoff`.
 
 Critério de saída: uma fonte não autenticada não é substituída silenciosamente por contexto antigo.
 

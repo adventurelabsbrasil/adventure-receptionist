@@ -30,3 +30,14 @@ def test_local_store_persists_run_handoff_and_ordered_events(tmp_path):
     ]
     first_line = (tmp_path / ".buzz" / "events.jsonl").read_text().splitlines()[0]
     assert json.loads(first_line)["run_id"] == "run-1"
+
+
+def test_store_reopens_task_after_triage_fields_are_saved(tmp_path):
+    store = LocalBuzzStore(tmp_path)
+    task = Task.new("Diagnose readiness")
+    task.source_refs = ["source:osana-map-snapshot"]
+    store.save(task)
+
+    reopened = store.get_task(task.task_id)
+    assert reopened is not None
+    assert reopened.source_refs == ["source:osana-map-snapshot"]

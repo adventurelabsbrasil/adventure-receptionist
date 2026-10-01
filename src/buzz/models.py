@@ -24,7 +24,7 @@ TASK_STATUSES = (
 )
 
 AUTONOMY_LEVELS = ("observe", "propose", "execute-local", "execute-external")
-SOURCE_STATUSES = ("verified", "snapshot", "stale", "deprecated", "partial", "unavailable")
+SOURCE_STATUSES = ("verified", "snapshot", "active", "stale", "deprecated", "partial", "unavailable")
 
 _TASK_TRANSITIONS: dict[str, set[str]] = {
     "captured": {"triage", "archived"},
