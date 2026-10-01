@@ -12,6 +12,7 @@ triagem, contexto explícito, handoff e observabilidade antes de adicionar conec
 uv sync
 uv run buzz --help
 uv run buzz doctor
+uv run buzz providers
 uv run buzz init --scope project
 ```
 
@@ -36,6 +37,9 @@ buzz briefing
 O protótipo não autentica, não consulta GitHub e não executa escrita externa. O preflight usa
 somente as fontes explicitamente declaradas no manifesto e bloqueia fontes materialmente stale,
 deprecated, parciais ou indisponíveis.
+
+`buzz providers` mostra capacidades locais sem autenticar ou enviar contexto. O provider
+determinístico existe para testes offline; Ollama será conectado em um adapter posterior.
 
 ## Documentação
 

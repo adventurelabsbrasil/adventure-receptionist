@@ -7,6 +7,7 @@ from pathlib import Path
 
 from . import __version__
 from .models import Event, Run, Task
+from .providers import provider_inventory
 from .store import LocalBuzzStore
 from .sources import PreflightBlocked, SourceRegistry
 from .triage import handoff_from_triage, triage_osana
@@ -21,6 +22,7 @@ def _parser() -> argparse.ArgumentParser:
     init.add_argument("--scope", choices=["project", "global", "both"], default="project")
 
     sub.add_parser("doctor", help="check local runtime capabilities")
+    sub.add_parser("providers", help="show local model provider capabilities")
     sub.add_parser("status", help="show local task state")
     sub.add_parser("briefing", help="show a local operational briefing")
 
@@ -67,6 +69,10 @@ def main() -> None:
             "github": "not_checked",
             "external_writes": False,
         }, indent=2))
+        return
+
+    if args.command == "providers":
+        print(json.dumps(provider_inventory(), indent=2, ensure_ascii=False))
         return
 
     store = LocalBuzzStore(root)

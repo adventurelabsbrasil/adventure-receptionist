@@ -37,6 +37,9 @@ Model provider / Executor / Human
 Recebe um pedido estruturado e devolve uma saída estruturada. Providers são adapters para
 OpenAI, Anthropic, Ollama e outros. O core não deve importar SDK de provider.
 
+O MVP começa com `DeterministicProvider` para testes sem rede. `provider_inventory()` apenas
+detecta capabilities locais; não autentica, inicia servidor ou envia contexto.
+
 ### `TaskStore`
 
 Persiste e consulta Tasks. O MVP usa filesystem local; SQLite, Postgres e Supabase são adapters

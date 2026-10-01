@@ -88,7 +88,10 @@ Critério de saída: o caso Osana gera um handoff revisável pelo operador.
 
 ### Fase 5 — provider LLM
 
+Status: contrato offline iniciado.
+
 - interface `ModelProvider`;
+- contrato estruturado offline;
 - adapter inicial para um provider selecionado;
 - Ollama e provider por API como adapters separados;
 - limites de tokens, custo, timeout e retry;
