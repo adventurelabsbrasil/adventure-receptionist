@@ -34,13 +34,17 @@ Critério de saída: instalação local reproduzível e CLI com `--help`, `--ver
 
 ### Fase 1 — domínio mínimo
 
+Status: concluída no primeiro slice local.
+
 - schemas para `Task`, `Entity`, `Source`, `ContextPack`, `Handoff`, `Run` e `Finding`;
 - estados canônicos e transições válidas;
-- storage local substituível;
-- IDs estáveis e versionamento de schema;
+- storage local substituível para tasks, runs e handoffs;
+- eventos JSONL append-only filtráveis por `run_id`;
+- IDs estáveis; versionamento formal de schema fica como próximo hardening do domínio;
 - política de incerteza `material_only`.
 
-Critério de saída: estado válido rejeita transições inválidas e pode ser salvo/reaberto.
+Critério de saída: estado válido rejeita transições inválidas, pode ser salvo/reaberto e deixa
+trace local ordenado.
 
 ### Fase 2 — intake e triagem
 
@@ -90,10 +94,10 @@ Critério de saída: o mesmo intake funciona com dois providers sem mudar o dom�
 
 ### Fase 6 — observabilidade e evals
 
-- event log JSONL;
+- event log JSONL; (slice inicial entregue na Fase 1)
 - `run_id`, `task_id`, `step_id` e `idempotency_key`;
 - trace de calls, handoffs, policy checks e approvals;
-- `buzz run show` e `buzz run trace`;
+- `buzz run <run_id>` e `buzz run <run_id> --trace`;
 - dataset de fixtures;
 - evals de classificação, contexto, handoff, segurança e custo;
 - comparação entre versões de prompt/modelo.

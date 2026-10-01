@@ -57,6 +57,13 @@ não por nomes hardcoded no fluxo.
 É o contrato entre etapas. Deve carregar objetivo, contexto permitido, resultado, incertezas,
 próxima ação e política de autonomia.
 
+### Estado local e trace
+
+`LocalBuzzStore` é o adapter inicial do estado. Ele persiste tasks, runs e handoffs como JSON
+independente e mantém `events.jsonl` append-only para reconstruir o trace de uma execução por
+`run_id`. O domínio valida os contratos antes de qualquer gravação; um storage futuro pode
+substituir esse adapter sem alterar a CLI ou a triagem.
+
 ## 4. Estado e autonomia
 
 Pipeline canônica:
@@ -66,7 +73,8 @@ captured → triage → ready → in_progress → waiting → in_review
 → approved → completed → archived
 ```
 
-`blocked` é condição transversal.
+`blocked` é um estado recuperável da pipeline, com retorno explícito para `ready`,
+`in_progress` ou `waiting`.
 
 Níveis de autonomia:
 

@@ -20,6 +20,7 @@ TASK_STATUSES = (
     "approved",
     "completed",
     "archived",
+    "blocked",
 )
 
 AUTONOMY_LEVELS = ("observe", "propose", "execute-local", "execute-external")
@@ -30,6 +31,7 @@ _TASK_TRANSITIONS: dict[str, set[str]] = {
     "triage": {"ready", "waiting", "archived"},
     "ready": {"in_progress", "waiting", "archived"},
     "in_progress": {"waiting", "in_review", "blocked", "archived"},
+    "blocked": {"ready", "in_progress", "waiting", "archived"},
     "waiting": {"ready", "in_progress", "archived"},
     "in_review": {"approved", "in_progress", "waiting", "archived"},
     "approved": {"completed", "in_progress", "archived"},
@@ -67,6 +69,14 @@ class Task:
     @classmethod
     def new(cls, objective: str) -> "Task":
         return cls(task_id=f"task-{uuid4().hex[:10]}", objective=objective)
+
+    def validate(self) -> None:
+        if not self.objective.strip():
+            raise ValueError("Task objective cannot be empty")
+        if self.status not in TASK_STATUSES:
+            raise ValueError(f"Unknown task status: {self.status}")
+        if self.autonomy_level not in AUTONOMY_LEVELS:
+            raise ValueError(f"Unknown autonomy level: {self.autonomy_level}")
 
 
 @dataclass
@@ -106,6 +116,12 @@ class ContextPack:
     constraints: dict[str, Any] = field(default_factory=dict)
     uncertainty_policy: str = "material_only"
 
+    def validate(self) -> None:
+        if not self.task_id:
+            raise ValueError("ContextPack requires task_id")
+        if not self.context_refs and not self.source_ids:
+            raise ValueError("ContextPack requires at least one context or source reference")
+
 
 @dataclass
 class Finding:
@@ -114,6 +130,12 @@ class Finding:
     certainty: str
     source_refs: list[str] = field(default_factory=list)
     impact: str = "medium"
+
+    def validate(self) -> None:
+        if not self.statement.strip():
+            raise ValueError("Finding statement cannot be empty")
+        if self.certainty not in {"confirmed", "probable", "uncertain"}:
+            raise ValueError(f"Unknown finding certainty: {self.certainty}")
 
 
 @dataclass
@@ -134,6 +156,11 @@ class Handoff:
             raise ValueError(f"Unknown autonomy level: {self.autonomy_level}")
         if not self.to_profile:
             raise ValueError("Handoff requires a target executor profile")
+        if self.context_pack.task_id != self.task_id:
+            raise ValueError("Handoff context_pack must belong to the handoff task")
+        self.context_pack.validate()
+        for finding in self.findings:
+            finding.validate()
 
 
 @dataclass
@@ -148,6 +175,48 @@ class Run:
     idempotency_key: str | None = None
     started_at: str = field(default_factory=now_iso)
     finished_at: str | None = None
+
+    def validate(self) -> None:
+        if not self.run_id or not self.task_id:
+            raise ValueError("Run requires run_id and task_id")
+        if self.status not in {"started", "completed", "failed", "cancelled"}:
+            raise ValueError(f"Unknown run status: {self.status}")
+
+
+@dataclass
+class Event:
+    event_id: str
+    event_type: str
+    run_id: str
+    task_id: str | None = None
+    step_id: str | None = None
+    payload: dict[str, Any] = field(default_factory=dict)
+    occurred_at: str = field(default_factory=now_iso)
+
+    @classmethod
+    def new(
+        cls,
+        event_type: str,
+        run_id: str,
+        *,
+        task_id: str | None = None,
+        step_id: str | None = None,
+        payload: dict[str, Any] | None = None,
+    ) -> "Event":
+        return cls(
+            event_id=f"event-{uuid4().hex[:10]}",
+            event_type=event_type,
+            run_id=run_id,
+            task_id=task_id,
+            step_id=step_id,
+            payload=payload or {},
+        )
+
+    def validate(self) -> None:
+        if not self.event_type.strip():
+            raise ValueError("Event type cannot be empty")
+        if not self.run_id:
+            raise ValueError("Event requires run_id")
 
 
 @dataclass
