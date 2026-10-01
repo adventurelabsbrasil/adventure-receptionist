@@ -22,7 +22,7 @@ Também é possível usar o pacote sem `uv`:
 python -m buzz --help
 ```
 
-## Primeiro fluxo Osana
+## Fluxos de avaliação
 
 ```bash
 buzz init --scope project
@@ -33,6 +33,18 @@ buzz preflight <task_id> --manifest examples/osana/manifest.yaml
 buzz handoff <task_id>
 buzz briefing
 ```
+
+Segundo caso, Liara como produto interno da Adventure:
+
+```bash
+buzz triage \
+  --fixture evals/liara/diagnose-readiness.json \
+  --manifest examples/liara/manifest.yaml
+buzz sources --manifest examples/liara/manifest.yaml
+```
+
+Osana permanece como o caso principal; Liara verifica se o mesmo pipeline separa produto,
+agente, runtime, dependências externas e estado confirmado por snapshot.
 
 O protótipo não autentica, não consulta GitHub e não executa escrita externa. O preflight usa
 somente as fontes explicitamente declaradas no manifesto e bloqueia fontes materialmente stale,

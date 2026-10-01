@@ -58,7 +58,8 @@ Status: concluída no primeiro fluxo local Osana.
 - criação de Task interna;
 - resultado estruturado e validado.
 
-Critério de saída: fixture Osana produz classificação provisória sem inventar dados ausentes.
+Critério de saída: fixtures Osana e Liara produzem classificação provisória sem inventar dados
+ausentes.
 
 ### Fase 3 — contexto e fontes
 
@@ -73,7 +74,8 @@ Status: concluída no primeiro registry local Osana.
 - bloqueio quando fonte material não está disponível;
 - comandos locais `sources`, `preflight` e `handoff`.
 
-Critério de saída: uma fonte não autenticada não é substituída silenciosamente por contexto antigo.
+Critério de saída: uma fonte não autenticada não é substituída silenciosamente por contexto antigo;
+Liara usa snapshots locais sem simular estado live.
 
 ### Fase 4 — handoff e executores
 

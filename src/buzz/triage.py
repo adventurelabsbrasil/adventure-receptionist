@@ -32,6 +32,45 @@ def triage_osana(task: Task, fixture: dict) -> TriageResult:
     )
 
 
+def triage_liara(task: Task, fixture: dict) -> TriageResult:
+    """Deterministic Liara triage against local, sanitized source snapshots."""
+    return TriageResult(
+        task_id=task.task_id,
+        classification_status="provisional",
+        project_id="liara",
+        entity_type="agent",
+        client_relation="internal",
+        complexity="high",
+        executor_profile="software-diagnostic-specialist",
+        autonomy_level="propose",
+        context_refs=fixture["context_refs"],
+        findings=[
+            "Liara is an Adventure-internal marketing operations agent/product.",
+            "The local canon describes Meta Ads and Google Ads read operations and gated write proposals.",
+            "Runtime, database and platform state are represented by snapshots in this run; no live authentication is available.",
+        ],
+        next_actions=[
+            "Compare the Liara canon with the local runtime and database schema snapshots.",
+            "Separate active Liara 2.0 capabilities from legacy Liara 1.x behavior.",
+            "Prepare a human-review handoff for the next readiness milestone.",
+        ],
+        material_uncertainties=[
+            "The snapshots do not prove the current server, database or scheduler state.",
+            "External platform credentials and live permissions were not checked.",
+            "The next Liara 2.0 milestone must be confirmed against the current roadmap.",
+        ],
+    )
+
+
+def triage_fixture(task: Task, fixture: dict) -> TriageResult:
+    """Select project-specific triage while keeping the CLI pipeline generic."""
+    triage_by_project = {"osana": triage_osana, "liara": triage_liara}
+    project_id = fixture.get("project_id")
+    if project_id not in triage_by_project:
+        raise ValueError(f"Unsupported fixture project: {project_id}")
+    return triage_by_project[project_id](task, fixture)
+
+
 def handoff_from_triage(task: Task, result: TriageResult, context_pack: ContextPack) -> Handoff:
     return Handoff(
         handoff_id=f"handoff-{task.task_id.removeprefix('task-')}",

@@ -11,6 +11,13 @@ Diagnose what is missing to finish Osana and prepare real-world validation with 
 Salvador Autocenter, referred by Gustavo Rosa. This is planning/diagnosis only: no contact,
 production change, live GitHub write or external side effect.
 
+## Second evaluation scenario
+
+Diagnose the current capabilities, limits, runtime dependencies and next readiness milestone
+of Liara, an Adventure-internal marketing operations agent/product. The evaluation uses
+sanitized local snapshots only; no live database, server or advertising-platform access is
+part of the MVP.
+
 ## Runtime rules
 
 - deterministic code owns state, policy, context and permissions;
@@ -25,6 +32,9 @@ production change, live GitHub write or external side effect.
 Given the Osana fixture and a natural-language objective, Buzz must produce within three intake
 rounds a provisional classification, scoped context refs, complexity, executor profile,
 uncertainties, next actions and a human-review handoff.
+
+The Liara fixture must exercise the same contract while distinguishing the internal product
+project from the related agent entity and explicitly reporting snapshot-only uncertainty.
 
 ## Deliberately deferred
 

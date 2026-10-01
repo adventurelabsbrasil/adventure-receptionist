@@ -13,6 +13,21 @@ def test_manifest_registry_reads_project_and_sources():
     assert registry.external_writes is False
 
 
+def test_manifest_registry_reads_internal_liara_project():
+    registry = SourceRegistry.from_manifest(Path(__file__).parents[1] / "examples/liara/manifest.yaml")
+
+    assert registry.project == {
+        "id": "liara",
+        "type": "product",
+        "ownership": "adventure",
+        "lifecycle": "active",
+        "purpose": "internal_marketing_operations",
+    }
+    assert registry.sources["liara-canon-snapshot"].status == "snapshot"
+    assert registry.sources["liara-runtime-snapshot"].status == "snapshot"
+    assert registry.external_writes is False
+
+
 def test_preflight_returns_only_allowlisted_sources():
     registry = SourceRegistry.from_manifest(Path(__file__).parents[1] / "examples/osana/manifest.yaml")
     context = registry.preflight(

@@ -10,7 +10,7 @@ from .models import Event, Run, Task
 from .providers import provider_inventory
 from .store import LocalBuzzStore
 from .sources import PreflightBlocked, SourceRegistry
-from .triage import handoff_from_triage, triage_osana
+from .triage import handoff_from_triage, triage_fixture
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -43,8 +43,9 @@ def _parser() -> argparse.ArgumentParser:
     intake = sub.add_parser("intake", help="capture a task")
     intake.add_argument("--text", required=True, help="natural-language objective")
 
-    triage = sub.add_parser("triage", help="run the local Osana triage fixture")
+    triage = sub.add_parser("triage", help="run a local project triage fixture")
     triage.add_argument("--fixture", type=Path, required=True)
+    triage.add_argument("--manifest", type=Path, help="manifest for the fixture project")
     return parser
 
 
@@ -98,8 +99,9 @@ def main() -> None:
         store.save(task)
         store.save_run(run)
         store.append_event(Event.new("task.captured", run.run_id, task_id=task.task_id, payload={"objective": task.objective}))
-        result = triage_osana(task, fixture)
-        registry = SourceRegistry.from_manifest(Path("examples/osana/manifest.yaml"))
+        result = triage_fixture(task, fixture)
+        manifest = args.manifest or Path(f"examples/{result.project_id}/manifest.yaml")
+        registry = SourceRegistry.from_manifest(manifest)
         try:
             context_pack = registry.preflight(task, result.context_refs)
         except PreflightBlocked as error:

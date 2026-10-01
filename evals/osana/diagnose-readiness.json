@@ -1,5 +1,6 @@
 {
   "name": "osana-diagnose-readiness",
+  "project_id": "osana",
   "input": "Diagnosticar o que falta para finalizar o Osana e preparar a validação com Salvador Autocenter.",
   "context_refs": [
     "project:osana",

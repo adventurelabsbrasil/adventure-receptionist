@@ -1,0 +1,25 @@
+{
+  "name": "liara-diagnose-readiness",
+  "project_id": "liara",
+  "input": "Diagnosticar o estado atual da Liara, o que ela faz, o que não faz, suas dependências e o que falta para o próximo marco, sem executar alterações.",
+  "context_refs": [
+    "project:liara",
+    "source:liara-canon-snapshot",
+    "source:liara-runtime-snapshot",
+    "source:liara-data-model-snapshot"
+  ],
+  "constraints": {
+    "external_writes": false,
+    "max_intake_rounds": 3,
+    "source_mode": "local_snapshot"
+  },
+  "expected": {
+    "project_id": "liara",
+    "entity_type": "agent",
+    "client_relation": "internal",
+    "complexity": "high",
+    "executor_profile": "software-diagnostic-specialist",
+    "autonomy_level": "propose",
+    "material_uncertainties": true
+  }
+}

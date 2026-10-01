@@ -1,0 +1,25 @@
+profile: adventure
+project:
+  id: liara
+  type: product
+  ownership: adventure
+  lifecycle: active
+  purpose: internal_marketing_operations
+context_policy: explicit_allowlist
+sources:
+  - id: liara-canon-snapshot
+    type: ssot_agent_snapshot
+    authority: agent_scope
+    status: snapshot
+    access: local_only
+  - id: liara-runtime-snapshot
+    type: runtime_code_snapshot
+    authority: implementation
+    status: snapshot
+    access: local_only
+  - id: liara-data-model-snapshot
+    type: database_schema_snapshot
+    authority: audit_and_state_model
+    status: snapshot
+    access: local_only
+external_writes: false
