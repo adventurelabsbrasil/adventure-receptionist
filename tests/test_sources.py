@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 import pytest
 
@@ -30,6 +31,26 @@ def test_osana_snapshot_declares_limited_repository_coverage():
     assert '"adventurelabsbrasil/ssot"' in document
     assert '"adventurelabsbrasil/buzz"' in document
     assert "produto Buzz, não contexto da Osana" in document
+
+
+def test_osana_snapshot_exposes_sanitized_context_for_triage():
+    root = Path(__file__).parents[1]
+    registry = SourceRegistry.from_manifest(root / "examples/osana/manifest.yaml")
+    context = registry.preflight(Task.new("Diagnose Osana"), ["source:osana-map-snapshot"])
+    snapshot = json.loads(context.documents["osana-map-snapshot"])
+
+    assert snapshot["identity"] == {
+        "name": "Osana",
+        "codename": "os-aaas",
+        "product_type": "AaaS para ordens de serviço",
+        "ownership": "Adventure",
+        "boundary": "internal_to_contracting_tenant",
+    }
+    assert "captura de ordem de serviço por texto, áudio e foto" in snapshot["capabilities"]
+    assert "não atende o cliente final" in snapshot["boundaries"]
+    assert "Supabase" in snapshot["dependencies"][0]
+    assert any(gate["id"] == "whatsapp_transport" and gate["status"] == "not_started" for gate in snapshot["approval_gates"])
+    assert "estado live do servidor, banco ou scheduler" in snapshot["open_questions"]
 
 
 def test_manifest_registry_reads_internal_liara_project():

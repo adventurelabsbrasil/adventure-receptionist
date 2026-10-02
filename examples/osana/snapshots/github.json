@@ -43,5 +43,67 @@
   "coverage": "multi_repository_inventory",
   "provisional": true,
   "source_note": "Inventário read-only provisório; não substitui o MAP canônico nem estado live. O endpoint de issues do repositório dedicado estava vazio.",
+  "identity": {
+    "name": "Osana",
+    "codename": "os-aaas",
+    "product_type": "AaaS para ordens de serviço",
+    "ownership": "Adventure",
+    "boundary": "internal_to_contracting_tenant"
+  },
+  "state": {
+    "lifecycle": "pilot",
+    "maturity": "in_construction",
+    "validated_surface": "capture, confirmation and correction of service orders",
+    "live_state_available": false
+  },
+  "capabilities": [
+    "captura de ordem de serviço por texto, áudio e foto",
+    "estrutura os dados da ordem e pergunta somente o que falta",
+    "confirma e corrige ordens existentes",
+    "painel interno para acompanhamento e histórico",
+    "trilha de eventos e evidências da interação"
+  ],
+  "boundaries": [
+    "não atende o cliente final",
+    "não emite documento para o cliente final",
+    "não é ERP, NFS-e, estoque, comissão ou contas a receber",
+    "aprovação de ordem permanece desativada por padrão",
+    "não assume que uma ordem chegou a ready_to_invoice sem evidência do piloto"
+  ],
+  "dependencies": [
+    "Supabase para persistência multi-tenant e RLS",
+    "aplicação Next.js do dashboard para painel e captura",
+    "webhook e bot Telegram para captura operacional",
+    "adventure-console para observabilidade interna",
+    "gateway de IA configurável por schema"
+  ],
+  "approval_gates": [
+    {
+      "id": "thesis_validation",
+      "status": "pending_evidence",
+      "description": "validar a tese com o primeiro piloto antes de abrir roadmap"
+    },
+    {
+      "id": "whatsapp_transport",
+      "status": "not_started",
+      "description": "transporte WhatsApp previsto em ADR-039, ainda não iniciado"
+    },
+    {
+      "id": "real_invoice_readiness",
+      "status": "pending_evidence",
+      "description": "nenhuma ordem real do piloto comprovou o estado ready_to_invoice"
+    },
+    {
+      "id": "approval_workflow",
+      "status": "disabled_by_default",
+      "description": "requires_approval permanece falso até decisão explícita"
+    }
+  ],
+  "open_questions": [
+    "estado live do servidor, banco ou scheduler",
+    "evidência atual de validação da tese e do piloto",
+    "quando o transporte WhatsApp será iniciado",
+    "se e quando a validação em segunda vertical será autorizada"
+  ],
   "items": []
 }
