@@ -188,6 +188,7 @@ def main() -> None:
             store.append_event(Event.new("source.preflight_blocked", run.run_id, task_id=task.task_id, payload={"reason": str(error)}))
             print(json.dumps({"error": str(error), "task_id": task.task_id}, indent=2, ensure_ascii=False), file=sys.stderr)
             raise SystemExit(2)
+        run.source_snapshot_ids = context_pack.source_ids
         config = provider_config(registry.provider if hasattr(registry, "provider") else None)
         router = ProviderRouter(config)
         try:
@@ -206,7 +207,21 @@ def main() -> None:
             run.validation_result = "failed"
             run.finished_at = now_iso()
             store.save_run(run)
-            store.append_event(Event.new("provider.failed", run.run_id, task_id=task.task_id, payload={"reason": str(error)}))
+            store.append_event(Event.new(
+                "provider.failed",
+                run.run_id,
+                task_id=task.task_id,
+                payload={
+                    "provider": run.provider,
+                    "model": run.model,
+                    "input_tokens": run.input_tokens,
+                    "output_tokens": run.output_tokens,
+                    "latency_ms": run.latency_ms,
+                    "source_ids": run.source_snapshot_ids,
+                    "validation_result": run.validation_result,
+                    "reason": str(error),
+                },
+            ))
             print(json.dumps({"error": str(error), "task_id": task.task_id}, indent=2, ensure_ascii=False), file=sys.stderr)
             raise SystemExit(2)
         run.provider = telemetry["provider"]
@@ -214,7 +229,6 @@ def main() -> None:
         run.input_tokens = telemetry["input_tokens"]
         run.output_tokens = telemetry["output_tokens"]
         run.latency_ms = telemetry["latency_ms"]
-        run.source_snapshot_ids = context_pack.source_ids
         run.validation_result = telemetry["validation_result"]
         run.status = "completed"
         run.finished_at = now_iso()
