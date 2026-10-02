@@ -4,7 +4,7 @@ import sys
 import pytest
 
 from buzz.cli import main
-from buzz.providers import ProviderContractError
+from buzz.providers import ModelResponse, ProviderContractError, ProviderUnavailable
 
 
 def _workspace(tmp_path):
@@ -80,3 +80,60 @@ def test_failed_provider_trace_keeps_standard_execution_metadata(tmp_path, monke
     assert run["validation_result"] == "failed"
     assert {"provider", "model", "input_tokens", "output_tokens", "latency_ms", "source_ids", "validation_result", "reason"} <= failed_event["payload"].keys()
     assert failed_event["payload"]["source_ids"] == ["canon"]
+
+
+def test_providers_command_reports_deterministic_and_ollama_without_network(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["buzz", "providers"])
+
+    main()
+
+    providers = json.loads(capsys.readouterr().out)
+    assert {provider["provider"] for provider in providers} == {"deterministic", "ollama"}
+    assert next(provider for provider in providers if provider["provider"] == "deterministic")["network"] is False
+
+
+def test_ollama_unavailable_fails_cli_without_fallback_or_handoff(tmp_path, monkeypatch, capsys):
+    fixture, manifest = _workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["buzz", "triage", "--fixture", str(fixture), "--manifest", str(manifest), "--provider", "ollama"],
+    )
+
+    def unavailable(*_args, **_kwargs):
+        raise ProviderUnavailable("Ollama provider unavailable at localhost:11434")
+
+    monkeypatch.setattr("buzz.providers.request.urlopen", unavailable)
+    with pytest.raises(SystemExit, match="2"):
+        main()
+
+    captured = capsys.readouterr()
+    assert "Ollama provider unavailable" in captured.err
+    assert not list((tmp_path / ".buzz" / "handoffs").glob("*.json"))
+    run = json.loads(next((tmp_path / ".buzz" / "runs").glob("*.json")).read_text())
+    assert run["provider"] == "ollama"
+    assert run["model"] == "llama3.2"
+    assert run["validation_result"] == "failed"
+
+
+def test_invalid_provider_schema_fails_cli_without_handoff(tmp_path, monkeypatch):
+    fixture, manifest = _workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["buzz", "triage", "--fixture", str(fixture), "--manifest", str(manifest)],
+    )
+
+    class InvalidProvider:
+        def complete(self, _request):
+            return ModelResponse("fake", "test-model", {"findings": []})
+
+    monkeypatch.setattr("buzz.cli.ProviderRouter.select", lambda *_args, **_kwargs: InvalidProvider())
+    with pytest.raises(SystemExit, match="2"):
+        main()
+
+    assert not list((tmp_path / ".buzz" / "handoffs").glob("*.json"))
+    run = json.loads(next((tmp_path / ".buzz" / "runs").glob("*.json")).read_text())
+    assert run["validation_result"] == "failed"
