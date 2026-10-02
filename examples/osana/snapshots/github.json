@@ -2,12 +2,46 @@
   "repository": "adventurelabsbrasil/osana-aaas",
   "project_id": "osana",
   "related_repositories": [
-    "adventurelabsbrasil/osana-aaas"
+    "adventurelabsbrasil/osana-aaas",
+    "adventurelabsbrasil/adventure-labs",
+    "adventurelabsbrasil/ssot"
   ],
-  "related_repository_note": "Osana pode aparecer em mais de um repositório ou contexto; esta fotografia cobre somente o repositório listado.",
+  "related_repository_note": "Osana aparece em mais de um repositório ou contexto; a identidade deve ser resolvida pela função da fonte, não apenas pelo nome.",
+  "repositories": [
+    {
+      "repository": "adventurelabsbrasil/osana-aaas",
+      "role": "dedicated_repository",
+      "status": "empty"
+    },
+    {
+      "repository": "adventurelabsbrasil/adventure-labs",
+      "role": "implementation_and_product_docs",
+      "paths": [
+        "apps/agents/os-aaas/",
+        "specs/001-osana-aaas/",
+        "supabase/migrations/*_osana_*.sql"
+      ],
+      "status": "canonical_product_implementation"
+    },
+    {
+      "repository": "adventurelabsbrasil/ssot",
+      "role": "governance_and_decisions",
+      "paths": [
+        "ADR/066-os-aaas-interno-ao-tenant.md",
+        "INVENTARIO_REPOS.md"
+      ],
+      "status": "canonical_governance"
+    }
+  ],
+  "excluded_repositories": [
+    {
+      "repository": "adventurelabsbrasil/buzz",
+      "reason": "produto Buzz, não contexto da Osana"
+    }
+  ],
   "mode": "snapshot",
-  "coverage": "open",
+  "coverage": "multi_repository_inventory",
   "provisional": true,
-  "source_note": "Provisional read-only snapshot; not the canonical Osana MAP and not live state.",
+  "source_note": "Inventário read-only provisório; não substitui o MAP canônico nem estado live. O endpoint de issues do repositório dedicado estava vazio.",
   "items": []
 }

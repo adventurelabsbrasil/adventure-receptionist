@@ -24,7 +24,12 @@ def test_osana_snapshot_declares_limited_repository_coverage():
 
     assert '"project_id": "osana"' in context.documents["osana-map-snapshot"]
     assert '"provisional": true' in context.documents["osana-map-snapshot"]
-    assert "somente o repositório listado" in context.documents["osana-map-snapshot"]
+    document = context.documents["osana-map-snapshot"]
+    assert '"coverage": "multi_repository_inventory"' in document
+    assert '"adventurelabsbrasil/adventure-labs"' in document
+    assert '"adventurelabsbrasil/ssot"' in document
+    assert '"adventurelabsbrasil/buzz"' in document
+    assert "produto Buzz, não contexto da Osana" in document
 
 
 def test_manifest_registry_reads_internal_liara_project():
