@@ -79,12 +79,14 @@ Liara usa snapshots locais sem simular estado live.
 
 ### Fase 4 — handoff e executores
 
-- `ExecutorRegistry`;
+Status: concluída no catálogo local de executores.
+
+- `ExecutorRegistry` estático e versionado;
 - profiles `receptionist`, `software-diagnostic-specialist` e `human-operator`;
-- handoff estruturado;
-- seleção de um executor por etapa;
-- autonomia `observe`/`propose`;
-- aprovação humana registrada.
+- seleção por capability sem fallback silencioso;
+- validação de autonomia `observe`/`propose`;
+- aprovação humana e dados do executor registrados no handoff e no trace;
+- comando `buzz executors` para inspeção local.
 
 Critério de saída: o caso Osana gera um handoff revisável pelo operador.
 

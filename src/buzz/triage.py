@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .executors import ExecutorRegistry
 from .models import ContextPack, Handoff, Task, TriageResult
 from .providers import ModelProvider, ModelRequest, ProviderContractError
 
@@ -122,7 +123,15 @@ def synthesize_triage(
     }
 
 
-def handoff_from_triage(task: Task, result: TriageResult, context_pack: ContextPack) -> Handoff:
+def handoff_from_triage(
+    task: Task,
+    result: TriageResult,
+    context_pack: ContextPack,
+    *,
+    executor_registry: ExecutorRegistry | None = None,
+) -> Handoff:
+    registry = executor_registry or ExecutorRegistry.default()
+    profile = registry.validate_assignment(result.executor_profile, result.autonomy_level)
     return Handoff(
         handoff_id=f"handoff-{task.task_id.removeprefix('task-')}",
         task_id=task.task_id,
@@ -132,5 +141,5 @@ def handoff_from_triage(task: Task, result: TriageResult, context_pack: ContextP
         context_pack=context_pack,
         next_actions=result.next_actions,
         autonomy_level=result.autonomy_level,
-        approval_required=True,
+        approval_required=profile.requires_human_approval,
     )

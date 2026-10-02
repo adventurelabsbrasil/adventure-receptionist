@@ -1,12 +1,14 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from buzz.models import Task
 import pytest
 
 from buzz.providers import DeterministicProvider, ModelResponse, ProviderContractError
+from buzz.executors import ExecutorError
 from buzz.sources import SourceRegistry
-from buzz.triage import synthesize_triage, triage_fixture, triage_osana
+from buzz.triage import handoff_from_triage, synthesize_triage, triage_fixture, triage_osana
 
 
 def test_osana_fixture_produces_scoped_handoff():
@@ -66,3 +68,22 @@ def test_invalid_provider_synthesis_blocks_handoff():
 
     with pytest.raises(ProviderContractError, match="exactly findings"):
         synthesize_triage(result, pack, InvalidProvider())
+
+
+def test_handoff_validates_executor_registry_and_requires_human_approval():
+    root = Path(__file__).parents[1]
+    fixture = json.loads((root / "evals/osana/diagnose-readiness.json").read_text())
+    task = Task.new(fixture["input"])
+    result = triage_osana(task, fixture)
+    pack = SourceRegistry.from_manifest(root / "examples/osana/manifest.yaml").preflight(
+        task, result.context_refs
+    )
+
+    handoff = handoff_from_triage(task, result, pack)
+
+    assert handoff.to_profile == "software-diagnostic-specialist"
+    assert handoff.autonomy_level == "propose"
+    assert handoff.approval_required is True
+
+    with pytest.raises(ExecutorError, match="Unknown executor profile"):
+        handoff_from_triage(task, replace(result, executor_profile="not-real"), pack)

@@ -45,6 +45,7 @@ def test_triage_trace_records_provider_model_usage_sources_and_validation(tmp_pa
     run = json.loads(next((tmp_path / ".buzz" / "runs").glob("*.json")).read_text())
     events = [json.loads(line) for line in (tmp_path / ".buzz" / "events.jsonl").read_text().splitlines()]
     provider_event = next(event for event in events if event["event_type"] == "provider.completed")
+    handoff_event = next(event for event in events if event["event_type"] == "handoff.created")
 
     assert run["provider"] == "deterministic"
     assert run["model"] == "rules-v1"
@@ -52,6 +53,12 @@ def test_triage_trace_records_provider_model_usage_sources_and_validation(tmp_pa
     assert run["validation_result"] == "valid"
     assert {"input_tokens", "output_tokens", "latency_ms", "source_ids", "validation_result"} <= provider_event["payload"].keys()
     assert provider_event["payload"]["source_ids"] == ["canon"]
+    assert handoff_event["payload"] == {
+        "handoff_id": handoff_event["payload"]["handoff_id"],
+        "to_profile": "software-diagnostic-specialist",
+        "autonomy_level": "propose",
+        "approval_required": True,
+    }
 
 
 def test_failed_provider_trace_keeps_standard_execution_metadata(tmp_path, monkeypatch):
@@ -90,6 +97,22 @@ def test_providers_command_reports_deterministic_and_ollama_without_network(monk
     providers = json.loads(capsys.readouterr().out)
     assert {provider["provider"] for provider in providers} == {"deterministic", "ollama"}
     assert next(provider for provider in providers if provider["provider"] == "deterministic")["network"] is False
+
+
+def test_executors_command_reports_local_catalog_without_network(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["buzz", "executors"])
+
+    main()
+
+    executors = json.loads(capsys.readouterr().out)
+    assert [executor["executor_id"] for executor in executors] == [
+        "receptionist",
+        "software-diagnostic-specialist",
+        "human-operator",
+    ]
+    specialist = executors[1]
+    assert "diagnose-readiness" in specialist["capabilities"]
+    assert specialist["requires_human_approval"] is True
 
 
 def test_ollama_unavailable_fails_cli_without_fallback_or_handoff(tmp_path, monkeypatch, capsys):

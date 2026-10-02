@@ -52,8 +52,9 @@ fonte. Uma fonte stale, deprecated ou indisponível não é substituída silenci
 
 ### `ExecutorRegistry`
 
-Cataloga skills, agents, tools, providers e humanos. A seleção é feita por perfil e capability,
-não por nomes hardcoded no fluxo.
+O MVP mantém um catálogo local de perfis de executor (`receptionist`,
+`software-diagnostic-specialist` e `human-operator`). A seleção é feita por perfil e capability,
+com autonomia e aprovação validadas antes do handoff; nenhum fallback silencioso é permitido.
 
 ### `Handoff`
 

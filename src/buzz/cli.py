@@ -8,6 +8,7 @@ from pathlib import Path
 from . import __version__
 from .briefing import build_briefing, build_status
 from .evals import EvalError, evaluate_fixture, evaluate_paths
+from .executors import ExecutorError, ExecutorRegistry
 from .github import GitHubReadClient, GitHubReadError
 from .models import Event, Run, Task, now_iso
 from .providers import ProviderContractError, ProviderRouter, ProviderUnavailable, provider_config, provider_inventory
@@ -26,6 +27,7 @@ def _parser() -> argparse.ArgumentParser:
 
     sub.add_parser("doctor", help="check local runtime capabilities")
     sub.add_parser("providers", help="show local model provider capabilities")
+    sub.add_parser("executors", help="show local executor profiles")
     github = sub.add_parser("github-read", help="read GitHub issues and pull requests without writing")
     github.add_argument("--repo", required=True, help="GitHub repository in OWNER/REPOSITORY format")
     github.add_argument("--state", choices=["open", "closed", "all"], default="open")
@@ -97,6 +99,10 @@ def main() -> None:
 
     if args.command == "providers":
         print(json.dumps(provider_inventory(), indent=2, ensure_ascii=False))
+        return
+
+    if args.command == "executors":
+        print(json.dumps(ExecutorRegistry.default().summary(), indent=2, ensure_ascii=False))
         return
 
     if args.command == "github-read":
@@ -234,7 +240,28 @@ def main() -> None:
         run.finished_at = now_iso()
         store.save_run(run)
         store.append_event(Event.new("provider.completed", run.run_id, task_id=task.task_id, payload={**telemetry, "source_ids": context_pack.source_ids}))
-        handoff = handoff_from_triage(task, result, context_pack)
+        try:
+            handoff = handoff_from_triage(task, result, context_pack)
+        except ExecutorError as error:
+            run.status = "failed"
+            run.validation_result = "executor_invalid"
+            run.finished_at = now_iso()
+            store.save_run(run)
+            store.append_event(Event.new(
+                "handoff.rejected",
+                run.run_id,
+                task_id=task.task_id,
+                payload={
+                    "executor_profile": result.executor_profile,
+                    "autonomy_level": result.autonomy_level,
+                    "approval_required": True,
+                    "source_ids": context_pack.source_ids,
+                    "validation_result": run.validation_result,
+                    "reason": str(error),
+                },
+            ))
+            print(json.dumps({"error": str(error), "task_id": task.task_id}, indent=2, ensure_ascii=False), file=sys.stderr)
+            raise SystemExit(2)
         store.save_handoff(handoff)
         task.project_id = result.project_id
         task.entity_type = result.entity_type
@@ -247,7 +274,17 @@ def main() -> None:
         store.save(task)
         store.append_event(Event.new("source.preflight", run.run_id, task_id=task.task_id, payload={"source_ids": context_pack.source_ids}))
         store.append_event(Event.new("task.triaged", run.run_id, task_id=task.task_id, payload=result.to_dict()))
-        store.append_event(Event.new("handoff.created", run.run_id, task_id=task.task_id, payload={"handoff_id": handoff.handoff_id, "to_profile": handoff.to_profile}))
+        store.append_event(Event.new(
+            "handoff.created",
+            run.run_id,
+            task_id=task.task_id,
+            payload={
+                "handoff_id": handoff.handoff_id,
+                "to_profile": handoff.to_profile,
+                "autonomy_level": handoff.autonomy_level,
+                "approval_required": handoff.approval_required,
+            },
+        ))
         print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
         return
 

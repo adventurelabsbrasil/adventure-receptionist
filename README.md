@@ -19,6 +19,7 @@ uv sync
 uv run buzz --help
 uv run buzz doctor
 uv run buzz providers
+uv run buzz executors
 uv run buzz github-read --repo OWNER/REPOSITORY --snapshot path/to/github.json
 uv run buzz init --scope project
 ```
@@ -68,6 +69,10 @@ deprecated, parciais ou indisponíveis.
 `buzz providers` mostra capacidades locais sem autenticar ou enviar contexto. O provider
 determinístico é o padrão offline; Ollama é uma opção explícita e, se indisponível, falha sem
 fallback automático. O provider recebe somente os documentos selecionados pelo preflight.
+
+`buzz executors` mostra o catálogo local de perfis (`receptionist`,
+`software-diagnostic-specialist` e `human-operator`). O registry valida capabilities, autonomia
+e aprovação humana antes de criar um handoff; não há execução externa nesta etapa.
 
 `buzz eval` executa os fixtures oficiais de Osana e Liara sem persistir tasks, runs ou handoffs.
 Ele valida classificação, fontes, provider e handoff; use `--fixture` para executar apenas um
