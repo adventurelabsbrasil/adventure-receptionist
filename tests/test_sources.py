@@ -116,6 +116,31 @@ def test_liara_snapshot_documents_are_loaded_only_when_selected():
     assert "Identidade e ownership" in context.documents["liara-canon-snapshot"]
 
 
+def test_liara_canon_snapshot_exposes_versioned_scope_and_gates():
+    root = Path(__file__).parents[1]
+    registry = SourceRegistry.from_manifest(root / "examples/liara/manifest.yaml")
+    context = registry.preflight(
+        Task.new("Diagnose Liara"),
+        [
+            "source:liara-canon-snapshot",
+            "source:liara-runtime-snapshot",
+            "source:liara-data-model-snapshot",
+        ],
+    )
+    canon = context.documents["liara-canon-snapshot"]
+
+    assert "produto interno da Adventure Labs" in canon
+    assert "agente e produto interno" in canon
+    assert "Liara 1.x representa comportamento legado" in canon
+    assert "Liara 2.0 é a linha de evolução" in canon
+    assert "GATE: login e consulta live — bloqueado" in canon
+    assert "GATE: escrita externa — requer preview e aprovação humana" in canon
+    assert "Perguntas em aberto" in canon
+    assert "qual estado live está disponível" in canon
+    assert "jobs agendados" in context.documents["liara-runtime-snapshot"]
+    assert "insights, regras, reversões" in context.documents["liara-data-model-snapshot"]
+
+
 def test_snapshot_path_outside_manifest_workspace_is_blocked(tmp_path):
     outside = tmp_path.parent / "outside.md"
     outside.write_text("not permitted")
