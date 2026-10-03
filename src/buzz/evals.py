@@ -32,6 +32,25 @@ class EvalReport:
         return asdict(self)
 
 
+@dataclass
+class EvalComparison:
+    fixture_name: str
+    candidates: dict[str, dict[str, Any]]
+    disagreements: list[str] = field(default_factory=list)
+
+    @property
+    def passed(self) -> bool:
+        return all(candidate["passed"] for candidate in self.candidates.values())
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "fixture_name": self.fixture_name,
+            "passed": self.passed,
+            "candidates": self.candidates,
+            "disagreements": self.disagreements,
+        }
+
+
 def evaluate_fixture(
     fixture_path: Path,
     provider: ModelProvider | None = None,
@@ -141,3 +160,48 @@ def evaluate_paths(
         manifest = (manifests or {}).get(project_id)
         reports.append(evaluate_fixture(fixture_path, provider, manifest=manifest))
     return reports
+
+
+def compare_fixture(
+    fixture_path: Path,
+    providers: dict[str, ModelProvider],
+    *,
+    manifest: Path | None = None,
+) -> EvalComparison:
+    """Run the same fixture against named providers and expose regressions explicitly."""
+    reports = {
+        name: evaluate_fixture(fixture_path, provider, manifest=manifest)
+        for name, provider in providers.items()
+    }
+    if not reports:
+        raise EvalError("comparison requires at least one provider")
+    fields = ("classification", "context", "provider", "handoff")
+    disagreements = [
+        f"checks.{field} differs: "
+        + repr({name: report.checks.get(field) for name, report in reports.items()})
+        for field in fields
+        if len({report.checks.get(field) for report in reports.values()}) > 1
+    ]
+    result_fields = (
+        "project_id", "entity_type", "complexity", "executor_profile", "autonomy_level",
+        "findings", "next_actions", "material_uncertainties",
+    )
+    for field in result_fields:
+        values = {name: report.result.get(field) for name, report in reports.items()}
+        normalized = {name: json.dumps(value, sort_keys=True, ensure_ascii=False) for name, value in values.items()}
+        if len(set(normalized.values())) > 1:
+            disagreements.append(f"result.{field} differs: {values!r}")
+    return EvalComparison(
+        fixture_name=next(iter(reports.values())).fixture_name,
+        candidates={
+            name: {
+                "passed": report.passed,
+                "provider": report.provider,
+                "model": report.model,
+                "checks": report.checks,
+                "failures": report.failures,
+            }
+            for name, report in reports.items()
+        },
+        disagreements=disagreements,
+    )
