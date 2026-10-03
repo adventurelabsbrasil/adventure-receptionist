@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import json
+import os
 import time
 from urllib import error, request
 from dataclasses import dataclass, field
@@ -38,6 +39,8 @@ class ModelResponse:
     input_tokens: int = 0
     output_tokens: int = 0
     latency_ms: int = 0
+    retries: int = 0
+    estimated_cost_usd: float = 0.0
 
     def validate(self) -> None:
         if not self.provider or not self.model:
@@ -85,6 +88,100 @@ class DeterministicProvider:
 
 class ProviderUnavailable(RuntimeError):
     """Raised when the selected provider cannot be reached."""
+
+
+@dataclass(frozen=True)
+class ApiProvider:
+    """OpenAI-compatible HTTP adapter; no provider SDK crosses this boundary."""
+
+    model: str = "local-api-model"
+    base_url: str = "https://api.openai.com/v1"
+    api_key_env: str = "OPENAI_API_KEY"
+    timeout_seconds: float = 20.0
+    retry_attempts: int = 1
+    input_cost_per_1k: float = 0.0
+    output_cost_per_1k: float = 0.0
+    name: str = "api"
+
+    def complete(self, request_data: ModelRequest) -> ModelResponse:
+        request_data.validate()
+        if self.retry_attempts < 0:
+            raise ProviderContractError("retry_attempts must be non-negative")
+        api_key = os.environ.get(self.api_key_env)
+        if not api_key:
+            raise ProviderUnavailable(f"API provider is not configured: missing {self.api_key_env}")
+        payload = json.dumps({
+            "model": self.model,
+            "messages": [{
+                "role": "user",
+                "content": json.dumps({
+                    "operation": request_data.operation,
+                    "input": request_data.input,
+                    "context": request_data.context_documents,
+                    "output_schema": request_data.output_schema,
+                }, ensure_ascii=False),
+            }],
+            "response_format": {"type": "json_object"},
+            "max_tokens": request_data.max_output_tokens,
+        }).encode()
+        started = time.perf_counter()
+        last_error: ProviderUnavailable | None = None
+        for attempt in range(self.retry_attempts + 1):
+            http_request = request.Request(
+                f"{self.base_url.rstrip('/')}/chat/completions",
+                data=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {api_key}",
+                },
+                method="POST",
+            )
+            try:
+                with request.urlopen(http_request, timeout=self.timeout_seconds) as response:
+                    body = json.loads(response.read().decode())
+                result = self._response(body, started, attempt)
+                result.validate()
+                return result
+            except error.HTTPError as exc:
+                last_error = ProviderUnavailable(
+                    f"API provider unavailable at {self.base_url}: HTTP {exc.code} ({exc.reason})"
+                )
+                if exc.code not in {408, 429} and not 500 <= exc.code < 600:
+                    break
+            except (OSError, error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+                last_error = ProviderUnavailable(f"API provider unavailable at {self.base_url}: {exc}")
+            if attempt < self.retry_attempts:
+                continue
+        assert last_error is not None
+        raise last_error
+
+    def _response(
+        self,
+        body: dict[str, Any],
+        started: float,
+        attempt: int,
+    ) -> ModelResponse:
+        try:
+            choice = body["choices"][0]["message"]["content"]
+            output = json.loads(choice) if isinstance(choice, str) else choice
+            usage = body.get("usage", {})
+            input_tokens = int(usage.get("prompt_tokens", 0))
+            output_tokens = int(usage.get("completion_tokens", 0))
+            cost = (input_tokens / 1000 * self.input_cost_per_1k) + (
+                output_tokens / 1000 * self.output_cost_per_1k
+            )
+            return ModelResponse(
+                provider=self.name,
+                model=self.model,
+                output=output,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                latency_ms=round((time.perf_counter() - started) * 1000),
+                retries=attempt,
+                estimated_cost_usd=round(cost, 8),
+            )
+        except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise ProviderContractError(f"API provider returned invalid structured output: {exc}") from exc
 
 
 @dataclass(frozen=True)
@@ -151,6 +248,11 @@ class ProviderConfig:
     model: str | None = None
     timeout_seconds: float = 10.0
     max_output_tokens: int = 1200
+    base_url: str = "https://api.openai.com/v1"
+    api_key_env: str = "OPENAI_API_KEY"
+    retry_attempts: int = 1
+    input_cost_per_1k: float = 0.0
+    output_cost_per_1k: float = 0.0
 
 
 class ProviderRouter:
@@ -166,6 +268,16 @@ class ProviderRouter:
                 model=self.config.model or "llama3.2",
                 timeout_seconds=self.config.timeout_seconds,
             )
+        if name == "api":
+            return ApiProvider(
+                model=self.config.model or "local-api-model",
+                base_url=self.config.base_url,
+                api_key_env=self.config.api_key_env,
+                timeout_seconds=self.config.timeout_seconds,
+                retry_attempts=self.config.retry_attempts,
+                input_cost_per_1k=self.config.input_cost_per_1k,
+                output_cost_per_1k=self.config.output_cost_per_1k,
+            )
         raise ProviderContractError(f"Unknown provider: {name}")
 
 
@@ -176,6 +288,11 @@ def provider_config(data: dict[str, Any] | None) -> ProviderConfig:
         model=data.get("model"),
         timeout_seconds=float(data.get("timeout_seconds", 10.0)),
         max_output_tokens=int(data.get("max_output_tokens", 1200)),
+        base_url=str(data.get("base_url", "https://api.openai.com/v1")),
+        api_key_env=str(data.get("api_key_env", "OPENAI_API_KEY")),
+        retry_attempts=int(data.get("retry_attempts", 1)),
+        input_cost_per_1k=float(data.get("input_cost_per_1k", 0.0)),
+        output_cost_per_1k=float(data.get("output_cost_per_1k", 0.0)),
     )
 
 
@@ -189,5 +306,12 @@ def provider_inventory() -> list[dict[str, Any]]:
             "model": None,
             "network": True,
             "configured": False,
+        },
+        {
+            "provider": "api",
+            "available": bool(os.environ.get("OPENAI_API_KEY")),
+            "model": None,
+            "network": True,
+            "configured": bool(os.environ.get("OPENAI_API_KEY")),
         },
     ]

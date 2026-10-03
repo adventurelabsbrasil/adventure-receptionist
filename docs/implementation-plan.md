@@ -97,12 +97,13 @@ Status: contrato offline iniciado.
 - interface `ModelProvider`;
 - contrato estruturado offline;
 - adapter inicial para um provider selecionado;
-- Ollama e provider por API como adapters separados;
-- limites de tokens, custo, timeout e retry;
+- Ollama e provider HTTP compatível com API como adapters separados;
+- limites de tokens, custo estimado, timeout e retry limitado;
 - structured output validado;
 - nenhum SDK de provider vazando para o domínio.
 
-Critério de saída: o mesmo intake funciona com dois providers sem mudar o domínio.
+Critério de saída: o mesmo intake funciona com providers determinístico, Ollama ou API sem mudar
+o domínio; falha de configuração/disponibilidade não produz fallback silencioso.
 
 ### Fase 6 — observabilidade e evals
 
@@ -116,10 +117,11 @@ Critério de saída: o mesmo intake funciona com dois providers sem mudar o dom�
 - `buzz run <run_id>` e `buzz run <run_id> --trace`;
 - dataset de fixtures;
 - evals de classificação, contexto, handoff, segurança e custo;
-- comparação entre versões de prompt/modelo.
+- comparação explícita entre candidatos de provider/modelo com `buzz eval --compare`.
 
-Critério de saída: uma regressão de roteamento ou contexto é detectável em eval local, e uma task
-aprovada pode ser encerrada por confirmação humana sem executar efeitos externos.
+Critério de saída: uma regressão de roteamento, contexto ou saída de provider é detectável em eval
+local, com trace de tokens, latência, retry e custo estimado; uma task aprovada pode ser encerrada
+por confirmação humana sem executar efeitos externos.
 
 ### Slice transversal — approval gate conversacional
 

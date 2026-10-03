@@ -77,8 +77,11 @@ O protótipo não executa escrita externa. O connector GitHub só é acionado ex
 deprecated, parciais ou indisponíveis.
 
 `buzz providers` mostra capacidades locais sem autenticar ou enviar contexto. O provider
-determinístico é o padrão offline; Ollama é uma opção explícita e, se indisponível, falha sem
-fallback automático. O provider recebe somente os documentos selecionados pelo preflight.
+determinístico é o padrão offline; Ollama e `api` são opções explícitas e, se indisponíveis,
+falham sem fallback automático. O provider recebe somente os documentos selecionados pelo preflight.
+O adapter `api` usa o contrato HTTP compatível com `/v1/chat/completions`, lê a chave apenas da
+variável configurada (`OPENAI_API_KEY` por padrão), aplica timeout/retry limitado e registra apenas
+uso de tokens, latência e custo estimado — nunca a chave.
 
 `buzz executors` mostra o catálogo local de perfis (`receptionist`,
 `software-diagnostic-specialist` e `human-operator`). O registry valida capabilities, autonomia
@@ -97,7 +100,8 @@ por um handoff aprovado; não persiste resultados nem acessa serviços externos.
 
 `buzz eval` executa os fixtures oficiais de Osana e Liara sem persistir tasks, runs ou handoffs.
 Ele valida classificação, fontes, provider e handoff; use `--fixture` para executar apenas um
-caso e `--provider ollama` para selecionar Ollama explicitamente.
+caso, `--provider ollama`/`--provider api` para selecionar um provider explicitamente ou
+`--compare deterministic,ollama` para comparar candidatos e apontar divergências.
 
 O connector GitHub é explicitamente read-only. `buzz github-read` usa `gh` somente para
 autenticação e leitura via `GET`; para integrar o resultado ao contexto, informe também um

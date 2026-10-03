@@ -19,7 +19,7 @@ from .diagnostics import build_diagnostic_report
 from .runtime_inventory import InventoryError, build_inventory_report
 from .runtime_connectors import GitHubRuntimeInventoryConnector, RuntimeConnectorError
 from .execution import ExecutionConfirmationService
-from .evals import EvalError, evaluate_fixture, evaluate_paths
+from .evals import EvalError, compare_fixture, evaluate_fixture, evaluate_paths
 from .executors import ExecutorError, ExecutorRegistry
 from .github import GitHubReadClient, GitHubReadError
 from .models import Approval, Event, Run, Task, now_iso, transition_task
@@ -126,12 +126,13 @@ def _parser() -> argparse.ArgumentParser:
     triage = sub.add_parser("triage", help="run a local project triage fixture")
     triage.add_argument("--fixture", type=Path, required=True)
     triage.add_argument("--manifest", type=Path, help="manifest for the fixture project")
-    triage.add_argument("--provider", choices=["deterministic", "ollama"], help="provider override")
+    triage.add_argument("--provider", choices=["deterministic", "ollama", "api"], help="provider override")
 
     evaluation = sub.add_parser("eval", help="evaluate Buzz fixtures without persisting state")
     evaluation.add_argument("--fixture", type=Path, action="append", help="fixture to evaluate; defaults to Osana and Liara")
     evaluation.add_argument("--manifest", type=Path, help="manifest for a single fixture")
-    evaluation.add_argument("--provider", choices=["deterministic", "ollama"], help="provider override")
+    evaluation.add_argument("--provider", choices=["deterministic", "ollama", "api"], help="provider override")
+    evaluation.add_argument("--compare", help="comma-separated provider candidates to compare")
     return parser
 
 
@@ -199,12 +200,35 @@ def main() -> None:
         if args.manifest and len(fixture_paths) != 1:
             print(json.dumps({"error": "--manifest requires exactly one --fixture"}, ensure_ascii=False), file=sys.stderr)
             raise SystemExit(2)
+        if args.provider and args.compare:
+            print(json.dumps({"error": "--provider and --compare are mutually exclusive"}), file=sys.stderr)
+            raise SystemExit(2)
         provider = None
         if args.provider:
             manifest_path = args.manifest or root / "examples" / json.loads(fixture_paths[0].read_text())["project_id"] / "manifest.yaml"
             registry = SourceRegistry.from_manifest(manifest_path)
             provider = ProviderRouter(provider_config(registry.provider)).select(args.provider)
         try:
+            if args.compare:
+                candidate_names = [name.strip() for name in args.compare.split(",") if name.strip()]
+                if len(set(candidate_names)) != len(candidate_names) or not candidate_names:
+                    raise EvalError("--compare requires unique provider names")
+                comparisons = []
+                for fixture_path in fixture_paths:
+                    fixture_data = json.loads(fixture_path.read_text())
+                    project_id = fixture_data["project_id"]
+                    manifest_path = args.manifest or root / "examples" / project_id / "manifest.yaml"
+                    registry = SourceRegistry.from_manifest(manifest_path)
+                    providers = {
+                        name: ProviderRouter(provider_config(registry.provider)).select(name)
+                        for name in candidate_names
+                    }
+                    comparisons.append(compare_fixture(fixture_path, providers, manifest=args.manifest))
+                output = {"passed": all(item.passed for item in comparisons), "comparisons": [item.to_dict() for item in comparisons]}
+                print(json.dumps(output, indent=2, ensure_ascii=False))
+                if not output["passed"]:
+                    raise SystemExit(1)
+                return
             if args.manifest:
                 reports = [evaluate_fixture(fixture_paths[0], provider, manifest=args.manifest)]
             else:
@@ -286,7 +310,8 @@ def main() -> None:
         except (ProviderContractError, ProviderUnavailable) as error:
             run.status = "failed"
             run.provider = args.provider or config.name
-            run.model = config.model or ("llama3.2" if (args.provider or config.name) == "ollama" else "rules-v1")
+            selected_name = args.provider or config.name
+            run.model = config.model or ("llama3.2" if selected_name == "ollama" else "local-api-model" if selected_name == "api" else "rules-v1")
             run.validation_result = "failed"
             run.finished_at = now_iso()
             store.save_run(run)
@@ -300,6 +325,8 @@ def main() -> None:
                     "input_tokens": run.input_tokens,
                     "output_tokens": run.output_tokens,
                     "latency_ms": run.latency_ms,
+                    "retries": run.retries,
+                    "estimated_cost_usd": run.estimated_cost_usd,
                     "source_ids": run.source_snapshot_ids,
                     "validation_result": run.validation_result,
                     "reason": str(error),
@@ -312,6 +339,8 @@ def main() -> None:
         run.input_tokens = telemetry["input_tokens"]
         run.output_tokens = telemetry["output_tokens"]
         run.latency_ms = telemetry["latency_ms"]
+        run.retries = telemetry["retries"]
+        run.estimated_cost_usd = telemetry["estimated_cost_usd"]
         run.validation_result = telemetry["validation_result"]
         run.status = "completed"
         run.finished_at = now_iso()

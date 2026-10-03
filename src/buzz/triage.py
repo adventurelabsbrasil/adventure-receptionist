@@ -119,6 +119,8 @@ def synthesize_triage(
         "input_tokens": response.input_tokens,
         "output_tokens": response.output_tokens,
         "latency_ms": response.latency_ms,
+        "retries": response.retries,
+        "estimated_cost_usd": response.estimated_cost_usd,
         "validation_result": "valid",
     }
 

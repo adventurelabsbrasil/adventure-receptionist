@@ -244,7 +244,7 @@ def test_providers_command_reports_deterministic_and_ollama_without_network(monk
     main()
 
     providers = json.loads(capsys.readouterr().out)
-    assert {provider["provider"] for provider in providers} == {"deterministic", "ollama"}
+    assert {provider["provider"] for provider in providers} == {"deterministic", "ollama", "api"}
     assert next(provider for provider in providers if provider["provider"] == "deterministic")["network"] is False
 
 

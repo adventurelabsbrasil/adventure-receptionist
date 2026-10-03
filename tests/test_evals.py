@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from buzz.evals import EvalError, evaluate_fixture, evaluate_paths
+from buzz.evals import EvalError, compare_fixture, evaluate_fixture, evaluate_paths
 from buzz.providers import DeterministicProvider
 
 
@@ -67,3 +67,23 @@ def test_evaluate_fixture_surfaces_preflight_errors():
 
     with pytest.raises(EvalError, match="preflight"):
         evaluate_fixture(fixture_path, BrokenProvider(), manifest=ROOT / "examples/osana/manifest.yaml")
+
+
+def test_compare_fixture_keeps_candidate_identity_and_reports_check_disagreement():
+    fixture_path = ROOT / "evals/osana/diagnose-readiness.json"
+
+    class DivergentProvider(DeterministicProvider):
+        def complete(self, request):
+            response = super().complete(request)
+            if request.operation == "triage_synthesis":
+                response.output["findings"] = ["different candidate output"]
+            return response
+
+    comparison = compare_fixture(
+        fixture_path,
+        {"rules": DeterministicProvider(), "divergent": DivergentProvider()},
+    )
+
+    assert comparison.passed is True
+    assert set(comparison.candidates) == {"rules", "divergent"}
+    assert any("result.findings differs" in item for item in comparison.disagreements)
