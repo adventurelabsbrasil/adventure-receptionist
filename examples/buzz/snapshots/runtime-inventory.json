@@ -1,0 +1,44 @@
+{
+  "schema_version": "runtime-inventory.v1",
+  "product_id": "buzz",
+  "sources": [
+    {
+      "source_id": "buzz-ollama-xeon-snapshot",
+      "authority": "local_sanitized_snapshot",
+      "observed_at": "2026-10-03T12:00:00+00:00",
+      "mode": "snapshot",
+      "status": "available",
+      "limitations": [
+        "snapshot confirma configuração observada, não estado live atual",
+        "não abre SSH nem consulta Ollama automaticamente"
+      ]
+    },
+    {
+      "source_id": "buzz-ollama-xeon-live",
+      "authority": "explicit_live_connector",
+      "observed_at": null,
+      "mode": "live",
+      "status": "unavailable",
+      "limitations": [
+        "nenhum connector live de host/Ollama foi selecionado",
+        "a porta local do túnel não prova o host remoto"
+      ]
+    }
+  ],
+  "trace": {
+    "runtime_id": "buzz-ollama-runtime",
+    "host_id": "xeon",
+    "channel": "cli",
+    "transport": "ssh-tunnel-http"
+  },
+  "assertions": [
+    {"subject_type": "product", "subject_id": "buzz", "property": "agent", "value": "buzz-core", "source_id": "buzz-ollama-xeon-snapshot"},
+    {"subject_type": "runtime", "subject_id": "buzz-ollama-runtime", "property": "provider", "value": "ollama", "source_id": "buzz-ollama-xeon-snapshot"},
+    {"subject_type": "runtime", "subject_id": "buzz-ollama-runtime", "property": "model", "value": "llama3.2:3b", "source_id": "buzz-ollama-xeon-snapshot"},
+    {"subject_type": "host", "subject_id": "xeon", "property": "role", "value": "remote Ollama host", "source_id": "buzz-ollama-xeon-snapshot"},
+    {"subject_type": "service", "subject_id": "ollama", "property": "endpoint_mode", "value": "remote", "source_id": "buzz-ollama-xeon-snapshot"},
+    {"subject_type": "channel", "subject_id": "buzz-cli", "property": "state", "value": "configured", "source_id": "buzz-ollama-xeon-snapshot"},
+    {"subject_type": "transport", "subject_id": "ssh-tunnel-http", "property": "state", "value": "configured", "source_id": "buzz-ollama-xeon-snapshot"},
+    {"subject_type": "runtime", "subject_id": "buzz-ollama-runtime", "property": "live_state", "value": null, "source_id": "buzz-ollama-xeon-live"}
+  ]
+}

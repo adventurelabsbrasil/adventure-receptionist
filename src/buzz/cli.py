@@ -17,7 +17,7 @@ from .conversation import (
 )
 from .diagnostics import build_diagnostic_report
 from .runtime_inventory import InventoryError, build_inventory_report
-from .runtime_connectors import GitHubRuntimeInventoryConnector, RuntimeConnectorError
+from .runtime_connectors import GitHubRuntimeInventoryConnector, OllamaRuntimeInventoryConnector, RuntimeConnectorError
 from .execution import ExecutionConfirmationService
 from .evals import EvalError, compare_fixture, evaluate_fixture, evaluate_paths
 from .executors import ExecutorError, ExecutorRegistry
@@ -26,7 +26,14 @@ from .models import Approval, Event, Run, Task, now_iso, transition_task
 from .providers import ProviderContractError, ProviderRouter, ProviderUnavailable, provider_config, provider_inventory
 from .store import LocalBuzzStore
 from .sources import PreflightBlocked, SourceRegistry
-from .triage import handoff_from_triage, synthesize_triage, triage_fixture
+from .triage import (
+    POLICY_VERSION,
+    PROMPT_VERSION,
+    SCHEMA_VERSION,
+    handoff_from_triage,
+    synthesize_triage,
+    triage_fixture,
+)
 
 
 def _conversation_transport(name: str):
@@ -112,8 +119,14 @@ def _parser() -> argparse.ArgumentParser:
     inventory = sub.add_parser("inventory", help="show runtime/provenance inventory")
     inventory_input = inventory.add_mutually_exclusive_group(required=True)
     inventory_input.add_argument("--fixture", type=Path, help="explicit local JSON inventory snapshot")
-    inventory_input.add_argument("--connector", choices=["github"], help="explicit live read-only connector")
+    inventory_input.add_argument("--connector", choices=["github", "ollama"], help="explicit live read-only connector")
     inventory.add_argument("--repo", help="OWNER/REPOSITORY for the GitHub connector")
+    inventory.add_argument("--base-url", help="explicit Ollama HTTP(S) endpoint")
+    inventory.add_argument("--model", help="required model name for the Ollama connector")
+    inventory.add_argument("--runtime-id", default="buzz-ollama-runtime")
+    inventory.add_argument("--host-id", help="explicit host metadata, e.g. xeon")
+    inventory.add_argument("--channel", help="explicit ingress channel, e.g. cli")
+    inventory.add_argument("--transport", help="explicit transport, e.g. ssh-tunnel-http")
     inventory.add_argument("--timeout", type=float, default=20.0, help="live connector timeout in seconds")
 
     run = sub.add_parser("run", help="inspect a local Buzz run")
@@ -245,13 +258,31 @@ def main() -> None:
     if args.command == "inventory":
         try:
             if args.fixture:
-                if args.repo:
-                    raise InventoryError("--repo is only valid with --connector github")
+                if any(value is not None for value in (args.repo, args.base_url, args.model, args.host_id, args.channel, args.transport)):
+                    raise InventoryError("connector options are only valid with --connector")
                 report = build_inventory_report(args.fixture)
-            else:
+            elif args.connector == "github":
                 if not args.repo:
                     raise InventoryError("--repo is required with --connector github")
+                if any(value is not None for value in (args.base_url, args.model, args.host_id, args.channel, args.transport)):
+                    raise InventoryError("Ollama options are only valid with --connector ollama")
                 report = GitHubRuntimeInventoryConnector(timeout_seconds=args.timeout).read(args.repo)
+            elif args.connector == "ollama":
+                if not args.base_url or not args.model:
+                    raise InventoryError("--base-url and --model are required with --connector ollama")
+                if args.repo:
+                    raise InventoryError("--repo is only valid with --connector github")
+                report = OllamaRuntimeInventoryConnector(
+                    base_url=args.base_url,
+                    model=args.model,
+                    runtime_id=args.runtime_id,
+                    host_id=args.host_id,
+                    channel=args.channel,
+                    transport=args.transport,
+                    timeout_seconds=args.timeout,
+                ).read()
+            else:
+                raise InventoryError("--connector is required when --fixture is not used")
             print(json.dumps(report, indent=2, ensure_ascii=False))
         except (InventoryError, RuntimeConnectorError) as error:
             print(json.dumps({"error": str(error)}, indent=2, ensure_ascii=False), file=sys.stderr)
@@ -296,6 +327,9 @@ def main() -> None:
             print(json.dumps({"error": str(error), "task_id": task.task_id}, indent=2, ensure_ascii=False), file=sys.stderr)
             raise SystemExit(2)
         run.source_snapshot_ids = context_pack.source_ids
+        run.prompt_version = PROMPT_VERSION
+        run.schema_version = SCHEMA_VERSION
+        run.policy_version = POLICY_VERSION
         config = provider_config(registry.provider if hasattr(registry, "provider") else None)
         router = ProviderRouter(config)
         try:
@@ -327,6 +361,10 @@ def main() -> None:
                     "latency_ms": run.latency_ms,
                     "retries": run.retries,
                     "estimated_cost_usd": run.estimated_cost_usd,
+                    "endpoint_mode": run.endpoint_mode,
+                    "prompt_version": run.prompt_version,
+                    "schema_version": run.schema_version,
+                    "policy_version": run.policy_version,
                     "source_ids": run.source_snapshot_ids,
                     "validation_result": run.validation_result,
                     "reason": str(error),
@@ -341,6 +379,10 @@ def main() -> None:
         run.latency_ms = telemetry["latency_ms"]
         run.retries = telemetry["retries"]
         run.estimated_cost_usd = telemetry["estimated_cost_usd"]
+        run.endpoint_mode = telemetry["endpoint_mode"]
+        run.prompt_version = telemetry["prompt_version"]
+        run.schema_version = telemetry["schema_version"]
+        run.policy_version = telemetry["policy_version"]
         run.validation_result = telemetry["validation_result"]
         run.status = "completed"
         run.finished_at = now_iso()

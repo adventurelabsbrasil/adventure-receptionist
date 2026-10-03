@@ -43,6 +43,10 @@ OpenAI, Anthropic, Ollama e outros. O core não deve importar SDK de provider.
 
 O MVP começa com `DeterministicProvider` para testes sem rede. `provider_inventory()` apenas
 detecta capabilities locais; não autentica, inicia servidor ou envia contexto.
+O adapter Ollama aceita `base_url` explícito no manifesto. Um Ollama no Xeon pode ser consumido
+por túnel SSH local, mantendo o domínio independente do host; cada resposta registra no trace se
+o endpoint foi `local`, `remote` ou `unknown`. Em túnel SSH, `endpoint_mode: remote` evita que a
+URL local do túnel mascare a localização real do backend.
 
 ### `TaskStore`
 
@@ -144,8 +148,11 @@ Cada afirmação deverá carregar fonte, timestamp, modo (`live` ou `snapshot`) 
 Fonte indisponível será reportada como `unavailable`; o Buzz não abrirá túnel SSH ou escolherá
 um host alternativo silenciosamente.
 
-O inventário agora aceita um único connector live explicitamente selecionado:
-`buzz inventory --connector github --repo OWNER/REPOSITORY`. Esse adapter consulta apenas
-metadados do repositório e o último sinal de workflow via `gh` em modo read-only. GitHub não é
-tratado como prova de host, deploy ou canal; essas afirmações são `unavailable` quando não há
-evidência. `--fixture <path>` continua sendo o caminho snapshot offline, sem fallback entre modos.
+O inventário aceita connectors live explicitamente selecionados:
+`buzz inventory --connector github --repo OWNER/REPOSITORY` e
+`buzz inventory --connector ollama --base-url URL --model MODEL`. GitHub consulta apenas
+metadados do repositório e o último sinal de workflow via `gh` em modo read-only. Ollama consulta
+somente `GET /api/tags` no endpoint fornecido. Nenhum connector abre SSH ou trata a URL local de
+um túnel como prova automática do host; `--host-id` é metadado explícito e suas limitações ficam
+na proveniência. `--fixture <path>` continua sendo o caminho snapshot offline, sem fallback entre
+modos.

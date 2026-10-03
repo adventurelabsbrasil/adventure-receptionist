@@ -5,6 +5,7 @@ import json
 import os
 import time
 from urllib import error, request
+from urllib.parse import urlparse
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -20,6 +21,10 @@ class ModelRequest:
     context_refs: list[str] = field(default_factory=list)
     context_documents: dict[str, str] = field(default_factory=dict)
     output_schema: str = "object"
+    output_schema_definition: dict[str, Any] | None = None
+    prompt_version: str = "unspecified"
+    schema_version: str = "unspecified"
+    policy_version: str = "unspecified"
     max_output_tokens: int = 1200
 
     def validate(self) -> None:
@@ -27,6 +32,13 @@ class ModelRequest:
             raise ProviderContractError("ModelRequest requires operation")
         if self.output_schema != "object":
             raise ProviderContractError("Only object structured output is supported in the MVP")
+        for name, value in (
+            ("prompt_version", self.prompt_version),
+            ("schema_version", self.schema_version),
+            ("policy_version", self.policy_version),
+        ):
+            if not value.strip():
+                raise ProviderContractError(f"{name} must be explicit")
         if self.max_output_tokens <= 0:
             raise ProviderContractError("max_output_tokens must be positive")
 
@@ -41,12 +53,15 @@ class ModelResponse:
     latency_ms: int = 0
     retries: int = 0
     estimated_cost_usd: float = 0.0
+    endpoint_mode: str = "local"
 
     def validate(self) -> None:
         if not self.provider or not self.model:
             raise ProviderContractError("ModelResponse requires provider and model")
         if not isinstance(self.output, dict):
             raise ProviderContractError("ModelResponse output must be an object")
+        if self.endpoint_mode not in {"local", "remote", "unknown"}:
+            raise ProviderContractError("ModelResponse endpoint_mode must be local, remote or unknown")
 
 
 class ModelProvider(Protocol):
@@ -81,6 +96,7 @@ class DeterministicProvider:
             provider=self.name,
             model=self.model,
             output=output,
+            endpoint_mode="local",
         )
         response.validate()
         return response
@@ -101,6 +117,7 @@ class ApiProvider:
     retry_attempts: int = 1
     input_cost_per_1k: float = 0.0
     output_cost_per_1k: float = 0.0
+    endpoint_mode: str = "auto"
     name: str = "api"
 
     def complete(self, request_data: ModelRequest) -> ModelResponse:
@@ -119,6 +136,10 @@ class ApiProvider:
                     "input": request_data.input,
                     "context": request_data.context_documents,
                     "output_schema": request_data.output_schema,
+                    "output_schema_definition": request_data.output_schema_definition,
+                    "prompt_version": request_data.prompt_version,
+                    "schema_version": request_data.schema_version,
+                    "policy_version": request_data.policy_version,
                 }, ensure_ascii=False),
             }],
             "response_format": {"type": "json_object"},
@@ -126,6 +147,7 @@ class ApiProvider:
         }).encode()
         started = time.perf_counter()
         last_error: ProviderUnavailable | None = None
+        body: dict[str, Any] | None = None
         for attempt in range(self.retry_attempts + 1):
             http_request = request.Request(
                 f"{self.base_url.rstrip('/')}/chat/completions",
@@ -179,6 +201,7 @@ class ApiProvider:
                 latency_ms=round((time.perf_counter() - started) * 1000),
                 retries=attempt,
                 estimated_cost_usd=round(cost, 8),
+                endpoint_mode=_configured_endpoint_mode(self.endpoint_mode, self.base_url),
             )
         except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
             raise ProviderContractError(f"API provider returned invalid structured output: {exc}") from exc
@@ -189,41 +212,61 @@ class OllamaProvider:
     model: str = "llama3.2"
     base_url: str = "http://localhost:11434"
     timeout_seconds: float = 10.0
+    retry_attempts: int = 1
+    input_cost_per_1k: float = 0.0
+    output_cost_per_1k: float = 0.0
+    endpoint_mode: str = "auto"
     name: str = "ollama"
 
     def complete(self, request_data: ModelRequest) -> ModelResponse:
         request_data.validate()
+        if self.retry_attempts < 0:
+            raise ProviderContractError("retry_attempts must be non-negative")
         prompt = json.dumps({
             "operation": request_data.operation,
             "input": request_data.input,
             "context": request_data.context_documents,
             "output_schema": request_data.output_schema,
+            "output_schema_definition": request_data.output_schema_definition,
+            "prompt_version": request_data.prompt_version,
+            "schema_version": request_data.schema_version,
+            "policy_version": request_data.policy_version,
         }, ensure_ascii=False)
         payload = json.dumps({
             "model": self.model,
             "prompt": prompt,
             "stream": False,
-            "format": "json",
+            "format": request_data.output_schema_definition or "json",
             "options": {"num_predict": request_data.max_output_tokens},
         }).encode()
         started = time.perf_counter()
-        http_request = request.Request(
-            f"{self.base_url.rstrip('/')}/api/generate",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            with request.urlopen(http_request, timeout=self.timeout_seconds) as response:
-                body = json.loads(response.read().decode())
-        except error.HTTPError as exc:
-            raise ProviderUnavailable(
-                f"Ollama provider unavailable at {self.base_url}: HTTP {exc.code} ({exc.reason})"
-            ) from exc
-        except (OSError, error.URLError, TimeoutError) as exc:
-            raise ProviderUnavailable(
-                f"Ollama provider unavailable at {self.base_url}: {exc}"
-            ) from exc
+        last_error: ProviderUnavailable | None = None
+        body: dict[str, Any] | None = None
+        for attempt in range(self.retry_attempts + 1):
+            http_request = request.Request(
+                f"{self.base_url.rstrip('/')}/api/generate",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                with request.urlopen(http_request, timeout=self.timeout_seconds) as response:
+                    body = json.loads(response.read().decode())
+                break
+            except error.HTTPError as exc:
+                last_error = ProviderUnavailable(
+                    f"Ollama provider unavailable at {self.base_url}: HTTP {exc.code} ({exc.reason})"
+                )
+                if exc.code not in {408, 429} and not 500 <= exc.code < 600:
+                    break
+            except (OSError, error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+                last_error = ProviderUnavailable(
+                    f"Ollama provider unavailable at {self.base_url}: {exc}"
+                )
+            if attempt < self.retry_attempts:
+                continue
+        if body is None:
+            raise last_error or ProviderUnavailable(f"Ollama provider unavailable at {self.base_url}")
         try:
             output = body.get("response")
             if isinstance(output, str):
@@ -235,6 +278,13 @@ class OllamaProvider:
                 input_tokens=int(body.get("prompt_eval_count", 0)),
                 output_tokens=int(body.get("eval_count", 0)),
                 latency_ms=round((time.perf_counter() - started) * 1000),
+                retries=attempt,
+                estimated_cost_usd=round(
+                    int(body.get("prompt_eval_count", 0)) / 1000 * self.input_cost_per_1k
+                    + int(body.get("eval_count", 0)) / 1000 * self.output_cost_per_1k,
+                    8,
+                ),
+                endpoint_mode=_configured_endpoint_mode(self.endpoint_mode, self.base_url),
             )
             result.validate()
             return result
@@ -249,10 +299,12 @@ class ProviderConfig:
     timeout_seconds: float = 10.0
     max_output_tokens: int = 1200
     base_url: str = "https://api.openai.com/v1"
+    ollama_base_url: str = "http://localhost:11434"
     api_key_env: str = "OPENAI_API_KEY"
     retry_attempts: int = 1
     input_cost_per_1k: float = 0.0
     output_cost_per_1k: float = 0.0
+    endpoint_mode: str = "auto"
 
 
 class ProviderRouter:
@@ -264,36 +316,75 @@ class ProviderRouter:
         if name == "deterministic":
             return DeterministicProvider(model=self.config.model or "rules-v1")
         if name == "ollama":
+            ollama_timeout = self.config.timeout_seconds
+            if self.config.name != "ollama" and os.environ.get("OLLAMA_TIMEOUT_SECONDS"):
+                ollama_timeout = float(os.environ["OLLAMA_TIMEOUT_SECONDS"])
             return OllamaProvider(
-                model=self.config.model or "llama3.2",
-                timeout_seconds=self.config.timeout_seconds,
+                model=(
+                    os.environ.get("OLLAMA_MODEL")
+                    or (self.config.model if self.config.name == "ollama" else None)
+                    or "llama3.2:3b"
+                ),
+                base_url=self.config.ollama_base_url,
+                timeout_seconds=ollama_timeout,
+                retry_attempts=self.config.retry_attempts,
+                input_cost_per_1k=self.config.input_cost_per_1k,
+                output_cost_per_1k=self.config.output_cost_per_1k,
+                endpoint_mode=self.config.endpoint_mode,
             )
         if name == "api":
             return ApiProvider(
-                model=self.config.model or "local-api-model",
+                model=(self.config.model if self.config.name == "api" else None) or "local-api-model",
                 base_url=self.config.base_url,
                 api_key_env=self.config.api_key_env,
                 timeout_seconds=self.config.timeout_seconds,
                 retry_attempts=self.config.retry_attempts,
                 input_cost_per_1k=self.config.input_cost_per_1k,
                 output_cost_per_1k=self.config.output_cost_per_1k,
+                endpoint_mode=self.config.endpoint_mode,
             )
         raise ProviderContractError(f"Unknown provider: {name}")
 
 
 def provider_config(data: dict[str, Any] | None) -> ProviderConfig:
     data = data or {}
+    name = str(data.get("name", "deterministic"))
+    ollama_base_url = data.get("ollama_base_url") or os.environ.get("OLLAMA_BASE_URL")
+    if ollama_base_url is None and name == "ollama":
+        ollama_base_url = data.get("base_url")
     return ProviderConfig(
-        name=str(data.get("name", "deterministic")),
+        name=name,
         model=data.get("model"),
         timeout_seconds=float(data.get("timeout_seconds", 10.0)),
         max_output_tokens=int(data.get("max_output_tokens", 1200)),
         base_url=str(data.get("base_url", "https://api.openai.com/v1")),
+        ollama_base_url=str(ollama_base_url or "http://localhost:11434"),
         api_key_env=str(data.get("api_key_env", "OPENAI_API_KEY")),
         retry_attempts=int(data.get("retry_attempts", 1)),
         input_cost_per_1k=float(data.get("input_cost_per_1k", 0.0)),
         output_cost_per_1k=float(data.get("output_cost_per_1k", 0.0)),
+        endpoint_mode=str(
+            data.get("endpoint_mode")
+            or os.environ.get("OLLAMA_ENDPOINT_MODE", "auto")
+        ),
     )
+
+
+def _endpoint_mode(base_url: str) -> str:
+    hostname = urlparse(base_url).hostname
+    if hostname in {"localhost", "127.0.0.1", "::1"}:
+        return "local"
+    if hostname:
+        return "remote"
+    return "unknown"
+
+
+def _configured_endpoint_mode(configured: str, base_url: str) -> str:
+    if configured == "auto":
+        return _endpoint_mode(base_url)
+    if configured not in {"local", "remote", "unknown"}:
+        raise ProviderContractError("endpoint_mode must be auto, local, remote or unknown")
+    return configured
 
 
 def provider_inventory() -> list[dict[str, Any]]:

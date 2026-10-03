@@ -50,6 +50,7 @@ buzz respond <task_id> --by <human-id> --text "quero ajustar o escopo"
 buzz diagnose <task_id>
 buzz inventory --fixture examples/osana/snapshots/runtime-inventory.json
 buzz inventory --connector github --repo OWNER/REPOSITORY --timeout 20
+buzz inventory --connector ollama --base-url http://127.0.0.1:11435 --model llama3.2:3b --runtime-id buzz-ollama-runtime --host-id xeon --channel cli --transport ssh-tunnel-http
 buzz approve <task_id> --by <human-id> --reason "reviewed locally"
 buzz reject <task_id> --by <human-id> --reason "needs more evidence"
 buzz confirm-execution <task_id> --by <human-id>
@@ -79,9 +80,20 @@ deprecated, parciais ou indisponíveis.
 `buzz providers` mostra capacidades locais sem autenticar ou enviar contexto. O provider
 determinístico é o padrão offline; Ollama e `api` são opções explícitas e, se indisponíveis,
 falham sem fallback automático. O provider recebe somente os documentos selecionados pelo preflight.
+Para usar Ollama no Xeon, mantenha um túnel SSH local e configure o provider do manifesto com
+`name: ollama`, `base_url: http://127.0.0.1:11434`, `endpoint_mode: remote`, `model` e
+`timeout_seconds`; alternativamente, `OLLAMA_BASE_URL`, `OLLAMA_MODEL` e
+`OLLAMA_TIMEOUT_SECONDS` configuram um override explícito para a avaliação. O trace preserva que
+o backend está remoto mesmo quando o túnel usa uma URL local.
 O adapter `api` usa o contrato HTTP compatível com `/v1/chat/completions`, lê a chave apenas da
 variável configurada (`OPENAI_API_KEY` por padrão), aplica timeout/retry limitado e registra apenas
-uso de tokens, latência e custo estimado — nunca a chave.
+uso de tokens, latência, retries e custo estimado — nunca a chave. Ollama mantém o mesmo contrato
+de telemetria e também falha explicitamente, sem fallback automático.
+
+`buzz inventory --connector ollama` faz somente `GET /api/tags` no endpoint explicitamente
+fornecido. Ele não abre SSH, não descobre host, não executa geração e não cai para snapshot.
+`--host-id`, `--channel` e `--transport` são metadados explícitos do operador; o relatório
+preserva suas limitações de evidência.
 
 `buzz executors` mostra o catálogo local de perfis (`receptionist`,
 `software-diagnostic-specialist` e `human-operator`). O registry valida capabilities, autonomia
@@ -102,6 +114,8 @@ por um handoff aprovado; não persiste resultados nem acessa serviços externos.
 Ele valida classificação, fontes, provider e handoff; use `--fixture` para executar apenas um
 caso, `--provider ollama`/`--provider api` para selecionar um provider explicitamente ou
 `--compare deterministic,ollama` para comparar candidatos e apontar divergências.
+Cada relatório e comparação expõe provider, modelo, versões de prompt/schema/policy, tokens,
+latência, retries e custo estimado.
 
 O connector GitHub é explicitamente read-only. `buzz github-read` usa `gh` somente para
 autenticação e leitura via `GET`; para integrar o resultado ao contexto, informe também um

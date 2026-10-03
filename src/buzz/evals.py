@@ -23,6 +23,15 @@ class EvalReport:
     checks: dict[str, bool]
     provider: str | None = None
     model: str | None = None
+    prompt_version: str | None = None
+    schema_version: str | None = None
+    policy_version: str | None = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+    latency_ms: int = 0
+    retries: int = 0
+    estimated_cost_usd: float = 0.0
+    endpoint_mode: str | None = None
     source_ids: list[str] = field(default_factory=list)
     document_ids: list[str] = field(default_factory=list)
     failures: list[str] = field(default_factory=list)
@@ -141,6 +150,15 @@ def evaluate_fixture(
         checks=checks,
         provider=str(telemetry["provider"]),
         model=str(telemetry["model"]),
+        prompt_version=str(telemetry["prompt_version"]),
+        schema_version=str(telemetry["schema_version"]),
+        policy_version=str(telemetry["policy_version"]),
+        input_tokens=int(telemetry["input_tokens"]),
+        output_tokens=int(telemetry["output_tokens"]),
+        latency_ms=int(telemetry["latency_ms"]),
+        retries=int(telemetry["retries"]),
+        estimated_cost_usd=float(telemetry["estimated_cost_usd"]),
+        endpoint_mode=str(telemetry["endpoint_mode"]),
         source_ids=context_pack.source_ids,
         document_ids=[source_id for source_id in context_pack.source_ids if source_id in context_pack.documents],
         failures=failures,
@@ -186,6 +204,11 @@ def compare_fixture(
         "project_id", "entity_type", "complexity", "executor_profile", "autonomy_level",
         "findings", "next_actions", "material_uncertainties",
     )
+    version_fields = ("provider", "model", "prompt_version", "schema_version", "policy_version", "endpoint_mode")
+    for field in version_fields:
+        values = {name: getattr(report, field) for name, report in reports.items()}
+        if len(set(values.values())) > 1:
+            disagreements.append(f"{field} differs: {values!r}")
     for field in result_fields:
         values = {name: report.result.get(field) for name, report in reports.items()}
         normalized = {name: json.dumps(value, sort_keys=True, ensure_ascii=False) for name, value in values.items()}
@@ -198,6 +221,15 @@ def compare_fixture(
                 "passed": report.passed,
                 "provider": report.provider,
                 "model": report.model,
+                "prompt_version": report.prompt_version,
+                "schema_version": report.schema_version,
+                "policy_version": report.policy_version,
+                "input_tokens": report.input_tokens,
+                "output_tokens": report.output_tokens,
+                "latency_ms": report.latency_ms,
+                "retries": report.retries,
+                "estimated_cost_usd": report.estimated_cost_usd,
+                "endpoint_mode": report.endpoint_mode,
                 "checks": report.checks,
                 "failures": report.failures,
             }

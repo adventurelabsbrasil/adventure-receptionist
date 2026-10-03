@@ -248,6 +248,41 @@ def test_providers_command_reports_deterministic_and_ollama_without_network(monk
     assert next(provider for provider in providers if provider["provider"] == "deterministic")["network"] is False
 
 
+def test_inventory_ollama_connector_receives_explicit_runtime_metadata(monkeypatch, capsys):
+    captured = {}
+
+    class FakeOllamaConnector:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def read(self):
+            return {"mode": "live", "trace": {"runtime_id": captured["runtime_id"], "host_id": captured["host_id"]}}
+
+    monkeypatch.setattr("buzz.cli.OllamaRuntimeInventoryConnector", FakeOllamaConnector)
+    monkeypatch.setattr(sys, "argv", [
+        "buzz", "inventory", "--connector", "ollama",
+        "--base-url", "http://127.0.0.1:11435", "--model", "llama3.2:3b",
+        "--runtime-id", "buzz-ollama-runtime", "--host-id", "xeon",
+        "--channel", "cli", "--transport", "ssh-tunnel-http",
+    ])
+
+    main()
+
+    assert json.loads(capsys.readouterr().out)["trace"] == {
+        "runtime_id": "buzz-ollama-runtime",
+        "host_id": "xeon",
+    }
+    assert captured == {
+        "base_url": "http://127.0.0.1:11435",
+        "model": "llama3.2:3b",
+        "runtime_id": "buzz-ollama-runtime",
+        "host_id": "xeon",
+        "channel": "cli",
+        "transport": "ssh-tunnel-http",
+        "timeout_seconds": 20.0,
+    }
+
+
 def test_executors_command_reports_local_catalog_without_network(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["buzz", "executors"])
 
