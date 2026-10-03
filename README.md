@@ -49,6 +49,7 @@ buzz respond <task_id> --by <human-id> --option 1
 buzz respond <task_id> --by <human-id> --text "quero ajustar o escopo"
 buzz diagnose <task_id>
 buzz inventory --fixture examples/osana/snapshots/runtime-inventory.json
+buzz inventory --connector github --repo OWNER/REPOSITORY --timeout 20
 buzz approve <task_id> --by <human-id> --reason "reviewed locally"
 buzz reject <task_id> --by <human-id> --reason "needs more evidence"
 buzz confirm-execution <task_id> --by <human-id>
@@ -129,8 +130,8 @@ em `must_do`, `unblock`, `delegate`, `waiting` e `watch`.
 - incerteza material sempre marcada;
 - qualquer efeito externo exige preview e aprovação.
 
-Primeiro slice da descoberta de runtime e proveniência: `buzz inventory --fixture <path>` lê um
-snapshot JSON local e explicita produto, runtime, host, serviço, banco, canal e transporte. Cada
-afirmação carrega fonte, timestamp, modo e limitações; estados `stale` e `unavailable` não são
-substituídos silenciosamente. Isso ainda não é descoberta live: MacBook, Xeon, VPS, Telegram e
-outros providers continuam sendo adapters futuros e nenhum connector é aberto implicitamente.
+O inventário aceita exatamente uma entrada explícita: `--fixture <path>` para snapshot local ou
+`--connector github --repo OWNER/REPOSITORY` para a leitura live read-only do repositório e do
+último sinal de workflow via `gh`. O connector GitHub não prova host, deploy ou canal: essas
+afirmações permanecem `unavailable` quando não há evidência. Cada afirmação carrega fonte,
+timestamp, modo e limitações; nenhum fallback, SSH implícito ou escrita externa é usado.

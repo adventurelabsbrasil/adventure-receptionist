@@ -17,6 +17,7 @@ from .conversation import (
 )
 from .diagnostics import build_diagnostic_report
 from .runtime_inventory import InventoryError, build_inventory_report
+from .runtime_connectors import GitHubRuntimeInventoryConnector, RuntimeConnectorError
 from .execution import ExecutionConfirmationService
 from .evals import EvalError, evaluate_fixture, evaluate_paths
 from .executors import ExecutorError, ExecutorRegistry
@@ -108,8 +109,12 @@ def _parser() -> argparse.ArgumentParser:
     diagnose = sub.add_parser("diagnose", help="build a read-only readiness report from an approved handoff")
     diagnose.add_argument("task_id")
 
-    inventory = sub.add_parser("inventory", help="show a local runtime/provenance snapshot")
-    inventory.add_argument("--fixture", type=Path, required=True, help="explicit local JSON inventory snapshot")
+    inventory = sub.add_parser("inventory", help="show runtime/provenance inventory")
+    inventory_input = inventory.add_mutually_exclusive_group(required=True)
+    inventory_input.add_argument("--fixture", type=Path, help="explicit local JSON inventory snapshot")
+    inventory_input.add_argument("--connector", choices=["github"], help="explicit live read-only connector")
+    inventory.add_argument("--repo", help="OWNER/REPOSITORY for the GitHub connector")
+    inventory.add_argument("--timeout", type=float, default=20.0, help="live connector timeout in seconds")
 
     run = sub.add_parser("run", help="inspect a local Buzz run")
     run.add_argument("run_id", help="run identifier")
@@ -215,8 +220,16 @@ def main() -> None:
 
     if args.command == "inventory":
         try:
-            print(json.dumps(build_inventory_report(args.fixture), indent=2, ensure_ascii=False))
-        except InventoryError as error:
+            if args.fixture:
+                if args.repo:
+                    raise InventoryError("--repo is only valid with --connector github")
+                report = build_inventory_report(args.fixture)
+            else:
+                if not args.repo:
+                    raise InventoryError("--repo is required with --connector github")
+                report = GitHubRuntimeInventoryConnector(timeout_seconds=args.timeout).read(args.repo)
+            print(json.dumps(report, indent=2, ensure_ascii=False))
+        except (InventoryError, RuntimeConnectorError) as error:
             print(json.dumps({"error": str(error)}, indent=2, ensure_ascii=False), file=sys.stderr)
             raise SystemExit(2)
         return

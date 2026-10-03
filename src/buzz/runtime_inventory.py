@@ -50,6 +50,13 @@ def build_inventory_report(path: Path) -> dict[str, Any]:
         raise InventoryError(f"Cannot read inventory snapshot: {path}") from exc
     if not isinstance(raw, dict):
         raise InventoryError("Inventory snapshot must be a JSON object")
+    return normalize_inventory_report(raw, source_selection={"type": "explicit", "path": str(path.resolve()), "fallback": "none"})
+
+
+def normalize_inventory_report(raw: dict[str, Any], *, source_selection: dict[str, Any]) -> dict[str, Any]:
+    """Normalize an inventory payload from an explicitly selected adapter."""
+    if not isinstance(raw, dict):
+        raise InventoryError("Inventory payload must be a JSON object")
 
     product_id = raw.get("product_id")
     if not isinstance(product_id, str) or not product_id.strip():
@@ -88,7 +95,7 @@ def build_inventory_report(path: Path) -> dict[str, Any]:
     return {
         "schema_version": raw.get("schema_version", "runtime-inventory.v1"),
         "product_id": product_id,
-        "mode": "snapshot",
+        "mode": raw.get("mode", "snapshot"),
         "sources": sources,
         "assertions": [asdict(assertion) for assertion in assertions],
         "trace": {
@@ -98,7 +105,7 @@ def build_inventory_report(path: Path) -> dict[str, Any]:
             "transport": trace.get("transport"),
         },
         "external_effects": False,
-        "source_selection": {"type": "explicit", "path": str(path.resolve()), "fallback": "none"},
+        "source_selection": source_selection,
     }
 
 
