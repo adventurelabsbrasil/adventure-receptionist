@@ -144,7 +144,8 @@ Cada afirmação deverá carregar fonte, timestamp, modo (`live` ou `snapshot`) 
 Fonte indisponível será reportada como `unavailable`; o Buzz não abrirá túnel SSH ou escolherá
 um host alternativo silenciosamente.
 
-O primeiro slice local dessa capacidade está em `buzz inventory --fixture <path>`. Ele usa um
-snapshot JSON explícito, sem rede ou fallback, e mantém conectados no trace os identificadores de
-runtime e host e os campos de canal e transporte. Isso não constitui descoberta live nem prova que
-um serviço esteja em operação.
+O inventário agora aceita um único connector live explicitamente selecionado:
+`buzz inventory --connector github --repo OWNER/REPOSITORY`. Esse adapter consulta apenas
+metadados do repositório e o último sinal de workflow via `gh` em modo read-only. GitHub não é
+tratado como prova de host, deploy ou canal; essas afirmações são `unavailable` quando não há
+evidência. `--fixture <path>` continua sendo o caminho snapshot offline, sem fallback entre modos.

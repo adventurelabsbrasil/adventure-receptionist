@@ -179,11 +179,13 @@ host e serviço. Essa capacidade é transversal e não pertence apenas ao Osana.
 - credenciais e efeitos externos continuam fora do diagnóstico por padrão;
 - consultas live somente por connector explicitamente selecionado e read-only.
 
-O primeiro slice implementado é o comando `buzz inventory --fixture <path>`, que lê um único
-snapshot JSON local explicitamente selecionado. O contrato normaliza fontes e afirmações com
-autoridade, timestamp, modo, status e limitações; também expõe no trace `runtime_id`, `host_id`,
-`channel` e `transport`. Snapshots `stale` e fontes `unavailable` permanecem visíveis, sem
-fallback. Não há rede, SSH, autenticação, deploy ou escrita externa nesse adapter.
+O primeiro slice local implementado é o comando `buzz inventory --fixture <path>`, que lê um único
+snapshot JSON local explicitamente selecionado. O primeiro connector live implementado é
+`buzz inventory --connector github --repo OWNER/REPOSITORY`: ele consulta apenas a autoridade
+GitHub via `gh` em modo read-only. O contrato normaliza fontes e afirmações com autoridade,
+timestamp, modo, status e limitações; também expõe no trace `runtime_id`, `host_id`, `channel` e
+`transport`. GitHub não prova host, deploy ou canal; essas afirmações ficam `unavailable`. Não há
+fallback entre connector e snapshot, SSH implícito, deploy ou escrita externa.
 
 Critério de saída: dado um produto/agente, o Buzz produz um inventário estruturado que distingue
 onde o código está, onde o serviço está rodando e por qual canal recebe tráfego, com evidência,
