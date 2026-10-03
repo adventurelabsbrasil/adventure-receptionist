@@ -216,6 +216,10 @@ class Run:
     latency_ms: int = 0
     retries: int = 0
     estimated_cost_usd: float = 0.0
+    endpoint_mode: str | None = None
+    prompt_version: str | None = None
+    schema_version: str | None = None
+    policy_version: str | None = None
     validation_result: str | None = None
     idempotency_key: str | None = None
     started_at: str = field(default_factory=now_iso)

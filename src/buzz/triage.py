@@ -5,6 +5,21 @@ from .models import ContextPack, Handoff, Task, TriageResult
 from .providers import ModelProvider, ModelRequest, ProviderContractError
 
 
+PROMPT_VERSION = "triage-synthesis-prompt.v1"
+SCHEMA_VERSION = "triage-synthesis-schema.v1"
+POLICY_VERSION = "triage-policy.v1"
+TRIAGE_OUTPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "findings": {"type": "array", "items": {"type": "string"}},
+        "next_actions": {"type": "array", "items": {"type": "string"}},
+        "material_uncertainties": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["findings", "next_actions", "material_uncertainties"],
+    "additionalProperties": False,
+}
+
+
 def triage_osana(task: Task, fixture: dict) -> TriageResult:
     """Deterministic MVP triage; an LLM adapter will replace classification later."""
     return TriageResult(
@@ -99,6 +114,10 @@ def synthesize_triage(
         },
         context_refs=context_pack.context_refs,
         context_documents=context_pack.documents,
+        prompt_version=PROMPT_VERSION,
+        schema_version=SCHEMA_VERSION,
+        policy_version=POLICY_VERSION,
+        output_schema_definition=TRIAGE_OUTPUT_SCHEMA,
         max_output_tokens=max_output_tokens,
     ))
     output = response.output
@@ -121,6 +140,10 @@ def synthesize_triage(
         "latency_ms": response.latency_ms,
         "retries": response.retries,
         "estimated_cost_usd": response.estimated_cost_usd,
+        "endpoint_mode": response.endpoint_mode,
+        "prompt_version": PROMPT_VERSION,
+        "schema_version": SCHEMA_VERSION,
+        "policy_version": POLICY_VERSION,
         "validation_result": "valid",
     }
 

@@ -24,6 +24,10 @@ def test_evaluate_paths_runs_both_official_buzz_cases_without_persistence():
     assert reports[0].checks["classification"] is True
     assert reports[1].checks["context"] is True
     assert reports[1].provider == "deterministic"
+    assert reports[0].prompt_version == "triage-synthesis-prompt.v1"
+    assert reports[0].schema_version == "triage-synthesis-schema.v1"
+    assert reports[0].policy_version == "triage-policy.v1"
+    assert reports[0].retries == 0
 
 
 def test_evaluate_fixture_reports_expected_contract_and_handoff():
@@ -87,3 +91,5 @@ def test_compare_fixture_keeps_candidate_identity_and_reports_check_disagreement
     assert comparison.passed is True
     assert set(comparison.candidates) == {"rules", "divergent"}
     assert any("result.findings differs" in item for item in comparison.disagreements)
+    assert "prompt_version" in comparison.candidates["rules"]
+    assert "input_tokens" in comparison.candidates["rules"]

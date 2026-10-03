@@ -92,7 +92,7 @@ Critério de saída: o caso Osana gera um handoff revisável pelo operador.
 
 ### Fase 5 — provider LLM
 
-Status: contrato offline iniciado.
+Status: concluída no contrato local e nos adapters HTTP controlados.
 
 - interface `ModelProvider`;
 - contrato estruturado offline;
@@ -100,12 +100,16 @@ Status: contrato offline iniciado.
 - Ollama e provider HTTP compatível com API como adapters separados;
 - limites de tokens, custo estimado, timeout e retry limitado;
 - structured output validado;
+- telemetria uniforme de tokens, latência, retries e custo estimado nos adapters;
+- falhas de configuração, timeout, transporte e resposta inválida são explícitas;
 - nenhum SDK de provider vazando para o domínio.
 
 Critério de saída: o mesmo intake funciona com providers determinístico, Ollama ou API sem mudar
 o domínio; falha de configuração/disponibilidade não produz fallback silencioso.
 
 ### Fase 6 — observabilidade e evals
+
+Status: concluída no trace/eval local versionado.
 
 - event log JSONL; (slice inicial entregue na Fase 1)
 - `run_id`, `task_id`, `step_id` e `idempotency_key`;
@@ -118,6 +122,8 @@ o domínio; falha de configuração/disponibilidade não produz fallback silenci
 - dataset de fixtures;
 - evals de classificação, contexto, handoff, segurança e custo;
 - comparação explícita entre candidatos de provider/modelo com `buzz eval --compare`.
+- versões explícitas de prompt, schema e policy em cada request, run, trace e relatório;
+- comparação de candidatos inclui identidade de versão, métricas e divergências de saída.
 
 Critério de saída: uma regressão de roteamento, contexto ou saída de provider é detectável em eval
 local, com trace de tokens, latência, retry e custo estimado; uma task aprovada pode ser encerrada
@@ -167,7 +173,7 @@ Critério de saída: o Buzz consegue consultar o MAP real sem usar fontes stale 
 
 ### Fase 9 — descoberta de runtime e proveniência
 
-Status: primeiro slice local implementado; conectores live continuam adiados.
+Status: primeiro slice local e connectors live GitHub/Ollama implementados.
 
 O Buzz deve conseguir responder de onde um produto/agente está operando sem confundir canal,
 host e serviço. Essa capacidade é transversal e não pertence apenas ao Osana.
@@ -186,8 +192,12 @@ snapshot JSON local explicitamente selecionado. O primeiro connector live implem
 `buzz inventory --connector github --repo OWNER/REPOSITORY`: ele consulta apenas a autoridade
 GitHub via `gh` em modo read-only. O contrato normaliza fontes e afirmações com autoridade,
 timestamp, modo, status e limitações; também expõe no trace `runtime_id`, `host_id`, `channel` e
-`transport`. GitHub não prova host, deploy ou canal; essas afirmações ficam `unavailable`. Não há
-fallback entre connector e snapshot, SSH implícito, deploy ou escrita externa.
+`transport`. GitHub não prova host, deploy ou canal; essas afirmações ficam `unavailable`. O
+connector Ollama (`buzz inventory --connector ollama`) consulta somente `GET /api/tags` em uma
+URL explicitamente fornecida, registra provider/modelo e pode representar Buzz/Ollama/Xeon sem
+abrir SSH ou inferir a identidade do host. Modelo ausente, timeout e endpoint indisponível são
+reportados sem fallback. Não há fallback entre connector e snapshot, SSH implícito, deploy ou
+escrita externa.
 
 Critério de saída: dado um produto/agente, o Buzz produz um inventário estruturado que distingue
 onde o código está, onde o serviço está rodando e por qual canal recebe tráfego, com evidência,

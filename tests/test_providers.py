@@ -1,4 +1,6 @@
 import json
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
 
 import pytest
 
@@ -11,6 +13,7 @@ from buzz.providers import (
     ProviderContractError,
     ProviderRouter,
     ProviderUnavailable,
+    provider_config,
 )
 
 
@@ -40,6 +43,55 @@ def test_provider_request_rejects_zero_budget():
 def test_router_rejects_unknown_provider_without_fallback():
     with pytest.raises(ProviderContractError, match="Unknown provider"):
         ProviderRouter(ProviderConfig()).select("made-up")
+
+
+def test_router_accepts_explicit_remote_ollama_endpoint():
+    provider = ProviderRouter(ProviderConfig(ollama_base_url="http://xeon.example:11434")).select("ollama")
+    assert provider.base_url == "http://xeon.example:11434"
+
+
+def test_ollama_override_does_not_inherit_deterministic_model():
+    provider = ProviderRouter(ProviderConfig(name="deterministic", model="rules-v1")).select("ollama")
+    assert provider.model == "llama3.2:3b"
+
+
+def test_ollama_model_can_be_selected_by_environment(monkeypatch):
+    monkeypatch.setenv("OLLAMA_MODEL", "qwen2.5:3b")
+    provider = ProviderRouter(ProviderConfig()).select("ollama")
+    assert provider.model == "qwen2.5:3b"
+
+
+def test_ollama_timeout_can_be_selected_by_environment_for_provider_override(monkeypatch):
+    monkeypatch.setenv("OLLAMA_TIMEOUT_SECONDS", "90")
+    provider = ProviderRouter(ProviderConfig(name="deterministic", timeout_seconds=10)).select("ollama")
+    assert provider.timeout_seconds == 90
+
+
+def test_ollama_endpoint_mode_can_be_selected_by_environment(monkeypatch):
+    monkeypatch.setenv("OLLAMA_ENDPOINT_MODE", "remote")
+    provider = ProviderRouter(provider_config({"name": "deterministic"})).select("ollama")
+    assert provider.endpoint_mode == "remote"
+
+
+def test_ollama_manifest_base_url_is_used_when_provider_is_ollama():
+    config = ProviderConfig(**{
+        "name": "ollama",
+        "ollama_base_url": "http://xeon.example:11434",
+    })
+    assert ProviderRouter(config).select().base_url == "http://xeon.example:11434"
+
+
+def test_ollama_tunnel_can_mark_remote_backend_explicitly():
+    provider = ProviderRouter(ProviderConfig(
+        ollama_base_url="http://127.0.0.1:11434",
+        endpoint_mode="remote",
+    )).select("ollama")
+    assert provider.endpoint_mode == "remote"
+
+
+def test_ollama_base_url_can_be_selected_by_environment(monkeypatch):
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://127.0.0.1:11435")
+    assert ProviderRouter(provider_config({"name": "ollama"})).select().base_url == "http://127.0.0.1:11435"
 
 
 def test_deterministic_triage_synthesis_returns_structured_lists_without_network():
@@ -86,6 +138,43 @@ def test_ollama_sends_only_selected_documents_and_parses_structured_output(monke
     assert captured["timeout"] == 3
     assert response.input_tokens == 11
     assert response.output_tokens == 7
+
+
+def test_ollama_retries_transient_failure_and_reports_cost(monkeypatch):
+    attempts = {"count": 0}
+
+    def fake_urlopen(*_args, **_kwargs):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            from urllib.error import HTTPError
+            raise HTTPError("http://localhost:11434/api/generate", 503, "busy", {}, None)
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+            def read(self):
+                return json.dumps({
+                    "response": '{"findings": [], "next_actions": [], "material_uncertainties": []}',
+                    "prompt_eval_count": 100,
+                    "eval_count": 25,
+                }).encode()
+
+        return Response()
+
+    monkeypatch.setattr("buzz.providers.request.urlopen", fake_urlopen)
+    response = OllamaProvider(
+        retry_attempts=1,
+        input_cost_per_1k=1.0,
+        output_cost_per_1k=2.0,
+    ).complete(ModelRequest(operation="triage_synthesis", input={}))
+
+    assert attempts["count"] == 2
+    assert response.retries == 1
+    assert response.estimated_cost_usd == 0.15
 
 
 def test_ollama_connection_failure_is_explicit(monkeypatch):
@@ -176,10 +265,58 @@ def test_api_provider_sends_structured_request_and_reports_cost_without_exposing
     ).complete(ModelRequest(operation="triage_synthesis", input={}, context_documents={"allowed": "yes"}))
 
     assert captured["body"]["response_format"] == {"type": "json_object"}
+    assert captured["body"]["messages"][0]["content"].find("output_schema_definition") >= 0
     assert captured["timeout"] == 3
     assert captured["authorization"] == "Bearer unit-test-key"
     assert response.output["findings"] == []
     assert response.estimated_cost_usd == 0.15
+
+
+def test_api_provider_works_against_controlled_local_http_endpoint(monkeypatch):
+    monkeypatch.setenv("TEST_API_KEY", "unit-test-key")
+    received = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):  # noqa: N802 - stdlib handler API
+            received["payload"] = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            body = json.dumps({
+                "choices": [{"message": {"content": '{"findings": [], "next_actions": [], "material_uncertainties": []}'}}],
+                "usage": {"prompt_tokens": 3, "completion_tokens": 2},
+            }).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args):
+            return
+
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    except PermissionError:
+        pytest.skip("sandbox does not permit binding a local controlled endpoint")
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        response = ApiProvider(
+            model="controlled-local-model",
+            base_url=f"http://127.0.0.1:{server.server_port}/v1",
+            api_key_env="TEST_API_KEY",
+        ).complete(ModelRequest(
+            operation="triage_synthesis",
+            input={},
+            prompt_version="prompt.v1",
+            schema_version="schema.v1",
+            policy_version="policy.v1",
+        ))
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert response.output["findings"] == []
+    assert received["payload"]["response_format"] == {"type": "json_object"}
+    assert "prompt.v1" in received["payload"]["messages"][0]["content"]
 
 
 def test_api_provider_retries_transient_failure_and_fails_without_fallback(monkeypatch):

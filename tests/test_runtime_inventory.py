@@ -34,6 +34,23 @@ def test_stale_snapshot_is_explicitly_reported():
     assert report["assertions"][0]["provenance"]["limitations"]
 
 
+def test_buzz_snapshot_preserves_ollama_xeon_provenance_without_live_inference():
+    report = build_inventory_report(ROOT / "examples/buzz/snapshots/runtime-inventory.json")
+
+    assert report["product_id"] == "buzz"
+    assert report["trace"] == {
+        "runtime_id": "buzz-ollama-runtime",
+        "host_id": "xeon",
+        "channel": "cli",
+        "transport": "ssh-tunnel-http",
+    }
+    by_subject = {(item["subject_type"], item["property"]): item for item in report["assertions"]}
+    assert by_subject[("runtime", "provider")]["value"] == "ollama"
+    assert by_subject[("service", "endpoint_mode")]["value"] == "remote"
+    assert by_subject[("runtime", "live_state")]["status"] == "unavailable"
+    assert by_subject[("runtime", "live_state")]["provenance"]["mode"] == "live"
+
+
 def test_inventory_rejects_assertion_without_declared_source(tmp_path):
     path = tmp_path / "inventory.json"
     path.write_text(json.dumps({
