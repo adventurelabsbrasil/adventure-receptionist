@@ -109,12 +109,32 @@ Critério de saída: o mesmo intake funciona com dois providers sem mudar o dom�
 - event log JSONL; (slice inicial entregue na Fase 1)
 - `run_id`, `task_id`, `step_id` e `idempotency_key`;
 - trace de calls, handoffs, policy checks e approvals;
+- aprovação local pendente, decisão humana e transição de estado via CLI;
+- confirmação humana pós-aprovação via `buzz confirm-execution`, com `execution.confirmed` no trace;
+- prompt conversacional transport-neutral com opções e resposta livre;
+- ajustes e dúvidas não fecham aprovação nem executam efeitos;
 - `buzz run <run_id>` e `buzz run <run_id> --trace`;
 - dataset de fixtures;
 - evals de classificação, contexto, handoff, segurança e custo;
 - comparação entre versões de prompt/modelo.
 
-Critério de saída: uma regressão de roteamento ou contexto é detectável em eval local.
+Critério de saída: uma regressão de roteamento ou contexto é detectável em eval local, e uma task
+aprovada pode ser encerrada por confirmação humana sem executar efeitos externos.
+
+### Slice transversal — approval gate conversacional
+
+Status: concluído localmente; transporte externo ainda não iniciado. A confirmação humana de
+execução também é local e não representa execução feita pelo Buzz.
+
+- `ApprovalPrompt` separa a pergunta humana do armazenamento estruturado de `Approval`;
+- opções explícitas para aprovar, rejeitar ou ajustar;
+- normalização local de respostas por opção ou texto livre;
+- dúvidas, ajustes e respostas ambíguas preservam o estado pendente;
+- `buzz prompt` e `buzz respond` são harness local para validar o protocolo, não a UX final;
+- nenhum canal, provider, host ou produto específico entra no contrato.
+
+Critério de saída: uma aprovação humana pode ser conduzida como conversa e só uma decisão explícita
+altera o estado local.
 
 ### Fase 7 — briefing operacional
 
@@ -143,11 +163,40 @@ Critério de saída: o usuário recebe próximas ações explicadas, não apenas
 
 Critério de saída: o Buzz consegue consultar o MAP real sem usar fontes stale silenciosamente.
 
+### Fase 9 — descoberta de runtime e proveniência
+
+Status: primeiro slice local implementado; conectores live continuam adiados.
+
+O Buzz deve conseguir responder de onde um produto/agente está operando sem confundir canal,
+host e serviço. Essa capacidade é transversal e não pertence apenas ao Osana.
+
+- inventário read-only de hosts e runtimes registrados, independentemente do provedor;
+- descoberta de metadados de deploy e serviço, sem executar SSH implícito;
+- identificação de canais e transportes (CLI, mensageria, webhook e similares);
+- correlação entre produto, runtime, banco, deploy e canal;
+- proveniência explícita no trace: `runtime_id`, `host_id`, `channel`, `transport` e modo live/snapshot;
+- estado `unavailable` quando uma fonte não responder, sem fallback silencioso ou inferência;
+- credenciais e efeitos externos continuam fora do diagnóstico por padrão;
+- consultas live somente por connector explicitamente selecionado e read-only.
+
+O primeiro slice implementado é o comando `buzz inventory --fixture <path>`, que lê um único
+snapshot JSON local explicitamente selecionado. O contrato normaliza fontes e afirmações com
+autoridade, timestamp, modo, status e limitações; também expõe no trace `runtime_id`, `host_id`,
+`channel` e `transport`. Snapshots `stale` e fontes `unavailable` permanecem visíveis, sem
+fallback. Não há rede, SSH, autenticação, deploy ou escrita externa nesse adapter.
+
+Critério de saída: dado um produto/agente, o Buzz produz um inventário estruturado que distingue
+onde o código está, onde o serviço está rodando e por qual canal recebe tráfego, com evidência,
+timestamp, autoridade e limitações de cada fonte.
+
+MacBook, Xeon, VPS, Osana e Telegram são exemplos de adapters/contextos possíveis da Adventure,
+não dependências do core nem nomes fixos do contrato.
+
 ## Ordem de execução recomendada
 
 ```text
 Fase 0 → Fase 1 → Fase 2 → Fase 3 → Fase 4
-→ Fase 5 → Fase 6 → Fase 7 → Fase 8
+→ Fase 5 → Fase 6 → Fase 7 → Fase 8 → Fase 9
 ```
 
 Não iniciar Fase 8 antes de o preflight de fontes e a observabilidade local estarem funcionando.
@@ -165,6 +214,7 @@ Não iniciar Fase 8 antes de o preflight de fontes e a observabilidade local est
 - não há segredo em arquivos versionáveis;
 - macOS é validado e CI está preparado para Linux/Windows;
 - Escritas GitHub e demais efeitos externos continuam bloqueados.
+- Descoberta de runtime fica planejada para a Fase 9, sem ser requisito do primeiro MVP.
 
 ## Decisões adiadas
 

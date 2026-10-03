@@ -1,0 +1,32 @@
+{
+  "schema_version": "runtime-inventory.v1",
+  "product_id": "osana",
+  "sources": [
+    {
+      "source_id": "osana-runtime-audit",
+      "authority": "local_sanitized_snapshot",
+      "observed_at": "2026-09-30T12:00:00+00:00",
+      "mode": "snapshot",
+      "status": "available",
+      "limitations": ["não prova estado live"]
+    },
+    {
+      "source_id": "osana-live-state",
+      "authority": "live_connector",
+      "observed_at": null,
+      "mode": "snapshot",
+      "status": "unavailable",
+      "limitations": ["nenhum connector live foi selecionado", "não abrir SSH automaticamente"]
+    }
+  ],
+  "trace": {"runtime_id": null, "host_id": null, "channel": "none_confirmed", "transport": null},
+  "assertions": [
+    {"subject_type": "product", "subject_id": "osana", "property": "lifecycle", "value": "pilot", "source_id": "osana-runtime-audit"},
+    {"subject_type": "service", "subject_id": "osana-demo-vercel", "property": "deploy", "value": "Vercel demo panel", "source_id": "osana-runtime-audit"},
+    {"subject_type": "database", "subject_id": "supabase-primary", "property": "dependency", "value": "11 osana_* tables; demo/pilot context only", "source_id": "osana-runtime-audit"},
+    {"subject_type": "runtime", "subject_id": "osana-runtime", "property": "state", "value": null, "source_id": "osana-live-state"},
+    {"subject_type": "host", "subject_id": "osana-host", "property": "state", "value": null, "source_id": "osana-live-state"},
+    {"subject_type": "channel", "subject_id": "osana-ingress", "property": "capture", "value": "none confirmed", "source_id": "osana-runtime-audit"},
+    {"subject_type": "transport", "subject_id": "osana-transport", "property": "state", "value": null, "source_id": "osana-live-state"}
+  ]
+}

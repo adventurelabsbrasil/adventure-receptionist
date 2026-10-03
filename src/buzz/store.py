@@ -5,7 +5,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from .models import Event, Handoff, Run, Task
+from .models import Approval, Event, Handoff, Run, Task
 
 
 class LocalTaskStore:
@@ -29,8 +29,9 @@ class LocalBuzzStore:
         self.tasks_root = self.root / "tasks"
         self.runs_root = self.root / "runs"
         self.handoffs_root = self.root / "handoffs"
+        self.approvals_root = self.root / "approvals"
         if create:
-            for directory in (self.tasks_root, self.runs_root, self.handoffs_root):
+            for directory in (self.tasks_root, self.runs_root, self.handoffs_root, self.approvals_root):
                 directory.mkdir(parents=True, exist_ok=True)
         self.events_path = self.root / "events.jsonl"
 
@@ -74,6 +75,26 @@ class LocalBuzzStore:
 
     def list_handoffs(self) -> list[dict[str, Any]]:
         return [json.loads(path.read_text()) for path in sorted(self.handoffs_root.glob("*.json"))]
+
+    def save_approval(self, approval: Approval) -> None:
+        approval.validate()
+        path = self.approvals_root / f"{approval.approval_id}.json"
+        path.write_text(json.dumps(asdict(approval), indent=2, ensure_ascii=False) + "\n")
+
+    def list_approvals(self) -> list[dict[str, Any]]:
+        return [json.loads(path.read_text()) for path in sorted(self.approvals_root.glob("*.json"))]
+
+    def get_approval(self, approval_id: str) -> Approval | None:
+        path = self.approvals_root / f"{approval_id}.json"
+        if not path.exists():
+            return None
+        return Approval(**json.loads(path.read_text()))
+
+    def get_pending_approval(self, task_id: str) -> dict[str, Any] | None:
+        for approval in self.list_approvals():
+            if approval["task_id"] == task_id and approval["status"] == "pending":
+                return approval
+        return None
 
     def append_event(self, event: Event) -> None:
         event.validate()

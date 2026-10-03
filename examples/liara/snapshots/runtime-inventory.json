@@ -1,0 +1,24 @@
+{
+  "schema_version": "runtime-inventory.v1",
+  "product_id": "liara",
+  "sources": [
+    {
+      "source_id": "liara-runtime-audit",
+      "authority": "local_sanitized_snapshot",
+      "observed_at": "2026-09-29T12:00:00+00:00",
+      "mode": "snapshot",
+      "status": "stale",
+      "limitations": ["snapshot excede a janela operacional; requer nova coleta"]
+    }
+  ],
+  "trace": {"runtime_id": "liara-runtime-snapshot", "host_id": null, "channel": "cli_or_automation_unconfirmed", "transport": "local"},
+  "assertions": [
+    {"subject_type": "product", "subject_id": "liara", "property": "ownership", "value": "Adventure", "source_id": "liara-runtime-audit"},
+    {"subject_type": "agent", "subject_id": "liara-agent", "property": "runtime", "value": "liara-runtime-snapshot", "source_id": "liara-runtime-audit"},
+    {"subject_type": "service", "subject_id": "liara-service", "property": "deploy", "value": "snapshot only", "source_id": "liara-runtime-audit"},
+    {"subject_type": "database", "subject_id": "liara-data", "property": "state", "value": "schema/dependency model snapshot", "source_id": "liara-runtime-audit"},
+    {"subject_type": "host", "subject_id": "liara-host", "property": "state", "value": null, "source_id": "liara-runtime-audit"},
+    {"subject_type": "channel", "subject_id": "liara-channel", "property": "state", "value": "unconfirmed", "source_id": "liara-runtime-audit"},
+    {"subject_type": "transport", "subject_id": "liara-transport", "property": "state", "value": "local snapshot", "source_id": "liara-runtime-audit"}
+  ]
+}

@@ -1,6 +1,6 @@
 import json
 
-from buzz.models import ContextPack, Event, Handoff, Run, Task
+from buzz.models import Approval, ContextPack, Event, Handoff, Run, Task
 from buzz.store import LocalBuzzStore
 
 
@@ -41,3 +41,17 @@ def test_store_reopens_task_after_triage_fields_are_saved(tmp_path):
     reopened = store.get_task(task.task_id)
     assert reopened is not None
     assert reopened.source_refs == ["source:osana-map-snapshot"]
+
+
+def test_local_store_persists_and_filters_approval_decisions(tmp_path):
+    store = LocalBuzzStore(tmp_path)
+    pending = Approval("approval-1", "task-1", "handoff-1", "pending")
+    approved = Approval("approval-2", "task-2", "handoff-2", "pending")
+    approved.decide("approved", decided_by="human-operator")
+
+    store.save_approval(pending)
+    store.save_approval(approved)
+
+    assert store.get_pending_approval("task-1")["approval_id"] == "approval-1"
+    assert store.get_pending_approval("task-2") is None
+    assert len(store.list_approvals()) == 2

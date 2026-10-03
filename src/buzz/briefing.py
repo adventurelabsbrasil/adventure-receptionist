@@ -71,10 +71,20 @@ def build_briefing(
     tasks = status["tasks"]
     task_by_id = {task["task_id"]: task for task in tasks}
     handoffs = store.list_handoffs()
+    approvals = store.list_approvals()
+    pending_approval_by_task = {
+        approval["task_id"]: approval
+        for approval in approvals
+        if approval["status"] == "pending"
+    }
     pending_approval_ids = {
         handoff["task_id"]
         for handoff in handoffs
         if handoff.get("approval_required", True)
+        and (
+            not approvals
+            or handoff["task_id"] in pending_approval_by_task
+        )
         and task_by_id.get(handoff["task_id"], {}).get("status") not in {"approved", "completed", "archived"}
     }
 
@@ -94,7 +104,14 @@ def build_briefing(
             })
 
     must_do = [
-        {"task_id": task["task_id"], "reason": "handoff_pending_approval"}
+        {
+            "task_id": task["task_id"],
+            "reason": "handoff_pending_approval",
+            **(
+                {"approval_id": pending_approval_by_task[task["task_id"]]["approval_id"]}
+                if task["task_id"] in pending_approval_by_task else {}
+            ),
+        }
         for task in tasks
         if task["task_id"] in pending_approval_ids
     ]

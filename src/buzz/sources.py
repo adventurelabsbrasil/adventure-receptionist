@@ -89,7 +89,7 @@ class SourceRegistry:
             raise PreflightBlocked(f"Sources lack an explicitly permitted snapshot path: {', '.join(missing_paths)}")
 
         documents = {
-            source_id: path.read_text()
+            source_id: path.read_text(encoding="utf-8")
             for source_id, path in (self.source_paths or {}).items()
             if source_id in source_ids
         }
@@ -137,7 +137,7 @@ def _parse_manifest(path: Path) -> dict[str, Any]:
     data: dict[str, Any] = {"sources": []}
     current: dict[str, Any] | None = None
     section: str | None = None
-    for raw_line in path.read_text().splitlines():
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue

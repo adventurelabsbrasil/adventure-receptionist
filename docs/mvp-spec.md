@@ -7,7 +7,8 @@
 ## Objective
 
 Validate an end-to-end, local-first flow where Buzz receives a natural-language demand,
-classifies it, selects explicit context, produces a structured handoff and leaves a trace.
+classifies it, selects explicit context, produces a structured handoff, records human approval
+and leaves a trace.
 
 ## First scenario
 
@@ -30,6 +31,7 @@ part of the MVP.
 - stale or unavailable sources are never silently substituted;
 - material uncertainty is explicit;
 - external writes require preview, approval, execute, reread and verify.
+- `completed` means a human confirmed execution; Buzz does not perform that execution in the MVP.
 
 ## MVP acceptance
 

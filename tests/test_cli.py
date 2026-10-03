@@ -59,6 +59,155 @@ def test_triage_trace_records_provider_model_usage_sources_and_validation(tmp_pa
         "autonomy_level": "propose",
         "approval_required": True,
     }
+    approval = json.loads(next((tmp_path / ".buzz" / "approvals").glob("*.json")).read_text())
+    task = json.loads(next((tmp_path / ".buzz" / "tasks").glob("*.json")).read_text())
+    assert approval["status"] == "pending"
+    assert task["status"] == "in_review"
+    assert any(event["event_type"] == "approval.requested" for event in events)
+
+
+def test_human_can_approve_local_handoff_and_trace_decision(tmp_path, monkeypatch, capsys):
+    fixture, manifest = _workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["buzz", "triage", "--fixture", str(fixture), "--manifest", str(manifest)])
+    main()
+    capsys.readouterr()
+
+    task_id = json.loads(next((tmp_path / ".buzz" / "tasks").glob("*.json")).read_text())["task_id"]
+    monkeypatch.setattr(sys, "argv", ["buzz", "approve", task_id, "--by", "rodrigo", "--reason", "reviewed locally"])
+    main()
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["approval"]["status"] == "approved"
+    assert output["status"] == "approved"
+    events = [json.loads(line) for line in (tmp_path / ".buzz" / "events.jsonl").read_text().splitlines()]
+    assert any(event["event_type"] == "approval.approved" for event in events)
+
+
+def test_human_can_confirm_execution_without_running_external_action(tmp_path, monkeypatch, capsys):
+    fixture, manifest = _workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["buzz", "triage", "--fixture", str(fixture), "--manifest", str(manifest)])
+    main()
+    capsys.readouterr()
+
+    task_id = json.loads(next((tmp_path / ".buzz" / "tasks").glob("*.json")).read_text())["task_id"]
+    monkeypatch.setattr(sys, "argv", ["buzz", "approve", task_id, "--by", "rodrigo"])
+    main()
+    capsys.readouterr()
+
+    monkeypatch.setattr(sys, "argv", ["buzz", "confirm-execution", task_id, "--by", "rodrigo", "--idempotency-key", "confirm-1"])
+    main()
+    output = json.loads(capsys.readouterr().out)
+
+    assert output["status"] == "completed"
+    assert output["execution_confirmed"] is True
+    events = [json.loads(line) for line in (tmp_path / ".buzz" / "events.jsonl").read_text().splitlines()]
+    confirmation = next(event for event in events if event["event_type"] == "execution.confirmed")
+    assert confirmation["payload"]["confirmation_mode"] == "human_attestation"
+
+
+def test_human_can_reject_local_handoff_without_external_effect(tmp_path, monkeypatch, capsys):
+    fixture, manifest = _workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["buzz", "triage", "--fixture", str(fixture), "--manifest", str(manifest)])
+    main()
+    capsys.readouterr()
+
+    task_id = json.loads(next((tmp_path / ".buzz" / "tasks").glob("*.json")).read_text())["task_id"]
+    monkeypatch.setattr(sys, "argv", ["buzz", "reject", task_id, "--by", "rodrigo", "--reason", "needs more evidence"])
+    main()
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["approval"]["status"] == "rejected"
+    assert output["status"] == "in_progress"
+
+
+def test_review_command_builds_read_only_human_packet(tmp_path, monkeypatch, capsys):
+    fixture, manifest = _workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["buzz", "triage", "--fixture", str(fixture), "--manifest", str(manifest)])
+    main()
+    capsys.readouterr()
+    before = sorted(path.relative_to(tmp_path).as_posix() for path in tmp_path.rglob("*"))
+    task_id = json.loads(next((tmp_path / ".buzz" / "tasks").glob("*.json")).read_text())["task_id"]
+
+    monkeypatch.setattr(sys, "argv", ["buzz", "review", task_id])
+    main()
+
+    packet = json.loads(capsys.readouterr().out)
+    after = sorted(path.relative_to(tmp_path).as_posix() for path in tmp_path.rglob("*"))
+    assert packet["task"]["task_id"] == task_id
+    assert packet["handoff"]["task_id"] == task_id
+    assert packet["approval"]["status"] == "pending"
+    assert packet["review"]["decision_required"] is True
+    assert packet["review"]["external_effects"] is False
+    assert packet["conversation"]["options"][0]["response_kind"] == "approve"
+    assert packet["trace"]
+    assert after == before
+
+
+def test_diagnose_command_builds_snapshot_readiness_report_without_writing(tmp_path, monkeypatch, capsys):
+    fixture, manifest = _workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["buzz", "triage", "--fixture", str(fixture), "--manifest", str(manifest)])
+    main()
+    capsys.readouterr()
+    task_id = json.loads(next((tmp_path / ".buzz" / "tasks").glob("*.json")).read_text())["task_id"]
+    monkeypatch.setattr(sys, "argv", ["buzz", "approve", task_id, "--by", "rodrigo"])
+    main()
+    capsys.readouterr()
+    before = sorted(path.relative_to(tmp_path).as_posix() for path in tmp_path.rglob("*"))
+
+    monkeypatch.setattr(sys, "argv", ["buzz", "diagnose", task_id])
+    main()
+
+    report = json.loads(capsys.readouterr().out)
+    after = sorted(path.relative_to(tmp_path).as_posix() for path in tmp_path.rglob("*"))
+    assert report["project_id"] == "liara"
+    assert report["mode"] == "snapshot_unstructured"
+    assert report["external_effects"] is False
+    assert report["next_actions"]
+    assert after == before
+
+
+def test_prompt_renders_conversational_approval_and_respond_keeps_adjustment_pending(tmp_path, monkeypatch, capsys):
+    fixture, manifest = _workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["buzz", "triage", "--fixture", str(fixture), "--manifest", str(manifest)])
+    main()
+    capsys.readouterr()
+    task_id = json.loads(next((tmp_path / ".buzz" / "tasks").glob("*.json")).read_text())["task_id"]
+
+    monkeypatch.setattr(sys, "argv", ["buzz", "prompt", task_id])
+    main()
+    prompt = capsys.readouterr().out
+    assert "Escolha uma opção" in prompt
+    assert "Ajustar" in prompt
+
+    monkeypatch.setattr(sys, "argv", ["buzz", "respond", task_id, "--by", "rodrigo", "--text", "quero ajustar o escopo"])
+    main()
+    response = json.loads(capsys.readouterr().out)
+    assert response["response"]["kind"] == "adjust"
+    assert response["decision_recorded"] is False
+    approval = json.loads(next((tmp_path / ".buzz" / "approvals").glob("*.json")).read_text())
+    assert approval["status"] == "pending"
+
+
+def test_conversational_approval_option_records_local_decision(tmp_path, monkeypatch, capsys):
+    fixture, manifest = _workspace(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["buzz", "triage", "--fixture", str(fixture), "--manifest", str(manifest)])
+    main()
+    capsys.readouterr()
+    task_id = json.loads(next((tmp_path / ".buzz" / "tasks").glob("*.json")).read_text())["task_id"]
+
+    monkeypatch.setattr(sys, "argv", ["buzz", "respond", task_id, "--by", "rodrigo", "--option", "1"])
+    main()
+    response = json.loads(capsys.readouterr().out)
+    assert response["response"]["kind"] == "approve"
+    assert response["approval"]["status"] == "approved"
+    assert response["status"] == "approved"
 
 
 def test_failed_provider_trace_keeps_standard_execution_metadata(tmp_path, monkeypatch):
