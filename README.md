@@ -43,6 +43,15 @@ buzz handoff <task_id>
 buzz blocked
 buzz stale --manifest examples/liara/manifest.yaml
 buzz pending-approvals
+buzz review <task_id>
+buzz prompt <task_id>
+buzz respond <task_id> --by <human-id> --option 1
+buzz respond <task_id> --by <human-id> --text "quero ajustar o escopo"
+buzz diagnose <task_id>
+buzz inventory --fixture examples/osana/snapshots/runtime-inventory.json
+buzz approve <task_id> --by <human-id> --reason "reviewed locally"
+buzz reject <task_id> --by <human-id> --reason "needs more evidence"
+buzz confirm-execution <task_id> --by <human-id>
 buzz briefing
 ```
 
@@ -72,7 +81,18 @@ fallback automático. O provider recebe somente os documentos selecionados pelo 
 
 `buzz executors` mostra o catálogo local de perfis (`receptionist`,
 `software-diagnostic-specialist` e `human-operator`). O registry valida capabilities, autonomia
-e aprovação humana antes de criar um handoff; não há execução externa nesta etapa.
+e aprovação humana antes de criar um handoff. O `triage` cria uma aprovação pendente local;
+`approve` e `reject` registram a decisão humana e o trace, sem executar qualquer efeito externo.
+`buzz review` reúne o pacote read-only para a decisão humana: task, handoff, aprovação, contexto,
+incertezas, próximos passos e trace.
+`buzz prompt` transforma esse pacote em uma pergunta conversacional, com opções para aprovar,
+rejeitar ou ajustar. `buzz respond` é somente um simulador local do protocolo: opções e texto livre
+podem pedir esclarecimento/ajuste sem fechar a aprovação; apenas uma aprovação ou rejeição explícita
+registra decisão. CLI é harness de desenvolvimento, não o transporte final.
+`buzz diagnose` gera um relatório de prontidão determinístico a partir do snapshot selecionado
+por um handoff aprovado; não persiste resultados nem acessa serviços externos.
+`buzz confirm-execution` apenas registra que uma pessoa confirmou a execução e move a task de
+`approved` para `completed`; o Buzz não executa a ação nem afirma ter produzido um efeito externo.
 
 `buzz eval` executa os fixtures oficiais de Osana e Liara sem persistir tasks, runs ou handoffs.
 Ele valida classificação, fontes, provider e handoff; use `--fixture` para executar apenas um
@@ -108,3 +128,9 @@ em `must_do`, `unblock`, `delegate`, `waiting` e `watch`.
 - políticas e permissões controladas por código;
 - incerteza material sempre marcada;
 - qualquer efeito externo exige preview e aprovação.
+
+Primeiro slice da descoberta de runtime e proveniência: `buzz inventory --fixture <path>` lê um
+snapshot JSON local e explicita produto, runtime, host, serviço, banco, canal e transporte. Cada
+afirmação carrega fonte, timestamp, modo e limitações; estados `stale` e `unavailable` não são
+substituídos silenciosamente. Isso ainda não é descoberta live: MacBook, Xeon, VPS, Telegram e
+outros providers continuam sendo adapters futuros e nenhum connector é aberto implicitamente.

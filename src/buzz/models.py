@@ -25,6 +25,7 @@ TASK_STATUSES = (
 
 AUTONOMY_LEVELS = ("observe", "propose", "execute-local", "execute-external")
 SOURCE_STATUSES = ("verified", "snapshot", "active", "stale", "deprecated", "partial", "unavailable")
+APPROVAL_STATUSES = ("pending", "approved", "rejected")
 
 _TASK_TRANSITIONS: dict[str, set[str]] = {
     "captured": {"triage", "archived"},
@@ -164,6 +165,41 @@ class Handoff:
         self.context_pack.validate()
         for finding in self.findings:
             finding.validate()
+
+
+@dataclass
+class Approval:
+    approval_id: str
+    task_id: str
+    handoff_id: str
+    status: str = "pending"
+    requested_by: str = "receptionist"
+    decided_by: str | None = None
+    reason: str | None = None
+    requested_at: str = field(default_factory=now_iso)
+    decided_at: str | None = None
+
+    def validate(self) -> None:
+        if not self.approval_id or not self.task_id or not self.handoff_id:
+            raise ValueError("Approval requires approval_id, task_id and handoff_id")
+        if self.status not in APPROVAL_STATUSES:
+            raise ValueError(f"Unknown approval status: {self.status}")
+        if self.status in {"approved", "rejected"} and not self.decided_by:
+            raise ValueError("Decided approval requires decided_by")
+
+    def decide(self, decision: str, *, decided_by: str, reason: str | None = None) -> "Approval":
+        if self.status != "pending":
+            raise ValueError("Approval is already decided")
+        if decision not in {"approved", "rejected"}:
+            raise ValueError(f"Unknown approval decision: {decision}")
+        if not decided_by.strip():
+            raise ValueError("Approval decision requires decided_by")
+        self.status = decision
+        self.decided_by = decided_by
+        self.reason = reason
+        self.decided_at = now_iso()
+        self.validate()
+        return self
 
 
 @dataclass

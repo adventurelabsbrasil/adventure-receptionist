@@ -3,18 +3,40 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
 from . import __version__
 from .briefing import build_briefing, build_status
+from .approval_service import ApprovalConversationService
+from .conversation import (
+    ConversationInput,
+    LocalConversationTransport,
+    TelegramDryRunTransport,
+    build_approval_prompt,
+)
+from .diagnostics import build_diagnostic_report
+from .runtime_inventory import InventoryError, build_inventory_report
+from .execution import ExecutionConfirmationService
 from .evals import EvalError, evaluate_fixture, evaluate_paths
 from .executors import ExecutorError, ExecutorRegistry
 from .github import GitHubReadClient, GitHubReadError
-from .models import Event, Run, Task, now_iso
+from .models import Approval, Event, Run, Task, now_iso, transition_task
 from .providers import ProviderContractError, ProviderRouter, ProviderUnavailable, provider_config, provider_inventory
 from .store import LocalBuzzStore
 from .sources import PreflightBlocked, SourceRegistry
 from .triage import handoff_from_triage, synthesize_triage, triage_fixture
+
+
+def _conversation_transport(name: str):
+    if name == "telegram-dry-run":
+        return TelegramDryRunTransport()
+    return LocalConversationTransport()
+
+
+def _approval_run_id(store: LocalBuzzStore, task_id: str) -> str:
+    run = next((item for item in store.list_runs() if item["task_id"] == task_id), None)
+    return run["run_id"] if run else f"run-approval-{task_id.removeprefix('task-')}"
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -42,6 +64,15 @@ def _parser() -> argparse.ArgumentParser:
     stale.add_argument("--manifest", type=Path, action="append", help="local manifest to inspect")
     approvals = sub.add_parser("pending-approvals", help="show handoffs awaiting approval")
     approvals.add_argument("--manifest", type=Path, action="append", help="local manifest to inspect")
+    for decision in ("approve", "reject"):
+        decision_parser = sub.add_parser(decision, help=f"{decision} a local handoff proposal")
+        decision_parser.add_argument("task_id")
+        decision_parser.add_argument("--by", required=True, dest="decided_by", help="human reviewer identity")
+        decision_parser.add_argument("--reason", help="optional review note")
+    confirm = sub.add_parser("confirm-execution", help="record a human confirmation without executing an action")
+    confirm.add_argument("task_id")
+    confirm.add_argument("--by", required=True, dest="actor_id", help="human confirming the execution")
+    confirm.add_argument("--idempotency-key", default=None)
     briefing = sub.add_parser("briefing", help="show a local operational briefing")
     briefing.add_argument("--manifest", type=Path, action="append", help="local manifest to inspect")
 
@@ -54,6 +85,31 @@ def _parser() -> argparse.ArgumentParser:
 
     handoff = sub.add_parser("handoff", help="show the task handoff")
     handoff.add_argument("task_id")
+
+    review = sub.add_parser("review", help="show a read-only human review packet")
+    review.add_argument("task_id")
+
+    prompt = sub.add_parser("prompt", help="show a conversational approval prompt")
+    prompt.add_argument("task_id")
+    prompt.add_argument("--json", action="store_true", dest="as_json", help="emit the transport-neutral prompt as JSON")
+    prompt.add_argument("--transport", choices=["local-dry-run", "telegram-dry-run"], default="local-dry-run")
+    prompt.add_argument("--conversation-id", default=None)
+
+    response = sub.add_parser("respond", help="simulate a conversational approval response locally")
+    response.add_argument("task_id")
+    response.add_argument("--by", required=True, dest="decided_by", help="human reviewer identity")
+    response_input = response.add_mutually_exclusive_group(required=True)
+    response_input.add_argument("--option", choices=["1", "2", "3"], help="prompt option key")
+    response_input.add_argument("--text", help="free-text response")
+    response.add_argument("--transport", choices=["local-dry-run", "telegram-dry-run"], default="local-dry-run")
+    response.add_argument("--conversation-id", default=None)
+    response.add_argument("--idempotency-key", default=None)
+
+    diagnose = sub.add_parser("diagnose", help="build a read-only readiness report from an approved handoff")
+    diagnose.add_argument("task_id")
+
+    inventory = sub.add_parser("inventory", help="show a local runtime/provenance snapshot")
+    inventory.add_argument("--fixture", type=Path, required=True, help="explicit local JSON inventory snapshot")
 
     run = sub.add_parser("run", help="inspect a local Buzz run")
     run.add_argument("run_id", help="run identifier")
@@ -157,7 +213,15 @@ def main() -> None:
             raise SystemExit(1)
         return
 
-    read_only = args.command in {"status", "blocked", "stale", "pending-approvals", "briefing", "github-read"}
+    if args.command == "inventory":
+        try:
+            print(json.dumps(build_inventory_report(args.fixture), indent=2, ensure_ascii=False))
+        except InventoryError as error:
+            print(json.dumps({"error": str(error)}, indent=2, ensure_ascii=False), file=sys.stderr)
+            raise SystemExit(2)
+        return
+
+    read_only = args.command in {"status", "blocked", "stale", "pending-approvals", "briefing", "github-read", "review", "prompt", "diagnose"}
     store = LocalBuzzStore(root, create=not read_only)
 
     if args.command == "sources":
@@ -263,6 +327,14 @@ def main() -> None:
             print(json.dumps({"error": str(error), "task_id": task.task_id}, indent=2, ensure_ascii=False), file=sys.stderr)
             raise SystemExit(2)
         store.save_handoff(handoff)
+        approval = None
+        if handoff.approval_required:
+            approval = Approval(
+                approval_id=f"approval-{task.task_id.removeprefix('task-')}",
+                task_id=task.task_id,
+                handoff_id=handoff.handoff_id,
+            )
+            store.save_approval(approval)
         task.project_id = result.project_id
         task.entity_type = result.entity_type
         task.client_relation = result.client_relation
@@ -271,6 +343,10 @@ def main() -> None:
         task.autonomy_level = result.autonomy_level
         task.source_refs = result.context_refs
         task.unknowns = result.material_uncertainties
+        transition_task(task, "triage")
+        transition_task(task, "ready")
+        transition_task(task, "in_progress")
+        transition_task(task, "in_review")
         store.save(task)
         store.append_event(Event.new("source.preflight", run.run_id, task_id=task.task_id, payload={"source_ids": context_pack.source_ids}))
         store.append_event(Event.new("task.triaged", run.run_id, task_id=task.task_id, payload=result.to_dict()))
@@ -285,7 +361,76 @@ def main() -> None:
                 "approval_required": handoff.approval_required,
             },
         ))
+        if approval is not None:
+            store.append_event(Event.new(
+                "approval.requested",
+                run.run_id,
+                task_id=task.task_id,
+                payload={"approval_id": approval.approval_id, "handoff_id": handoff.handoff_id},
+            ))
         print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
+        return
+
+    if args.command in {"approve", "reject"}:
+        task = store.get_task(args.task_id)
+        if task is None:
+            print(json.dumps({"error": f"Task not found: {args.task_id}"}, indent=2), file=sys.stderr)
+            raise SystemExit(1)
+        approval_data = store.get_pending_approval(args.task_id)
+        if approval_data is None:
+            print(json.dumps({"error": f"Pending approval not found for task: {args.task_id}"}, indent=2), file=sys.stderr)
+            raise SystemExit(1)
+        approval = store.get_approval(approval_data["approval_id"])
+        assert approval is not None
+        decision = "approved" if args.command == "approve" else "rejected"
+        try:
+            approval.decide(decision, decided_by=args.decided_by, reason=args.reason)
+            next_status = "approved" if decision == "approved" else "in_progress"
+            transition_task(task, next_status)
+        except ValueError as error:
+            print(json.dumps({"error": str(error), "task_id": args.task_id}, indent=2), file=sys.stderr)
+            raise SystemExit(2)
+        store.save_approval(approval)
+        store.save(task)
+        run = next((item for item in store.list_runs() if item["task_id"] == task.task_id), None)
+        run_id = run["run_id"] if run else f"run-approval-{task.task_id.removeprefix('task-')}"
+        store.append_event(Event.new(
+            f"approval.{decision}",
+            run_id,
+            task_id=task.task_id,
+            payload={
+                "approval_id": approval.approval_id,
+                "handoff_id": approval.handoff_id,
+                "decided_by": approval.decided_by,
+                "reason": approval.reason,
+            },
+        ))
+        print(json.dumps({"task_id": task.task_id, "approval": approval.__dict__, "status": task.status}, indent=2, ensure_ascii=False))
+        return
+
+    if args.command == "confirm-execution":
+        task = store.get_task(args.task_id)
+        approval_data = next((item for item in store.list_approvals() if item["task_id"] == args.task_id), None)
+        if task is None:
+            print(json.dumps({"error": f"Task not found: {args.task_id}"}, indent=2), file=sys.stderr)
+            raise SystemExit(1)
+        if approval_data is None:
+            print(json.dumps({"error": f"Approval not found for task: {args.task_id}"}, indent=2), file=sys.stderr)
+            raise SystemExit(1)
+        approval = store.get_approval(approval_data["approval_id"])
+        assert approval is not None
+        try:
+            confirmation = ExecutionConfirmationService(store).confirm(
+                task,
+                approval,
+                actor_id=args.actor_id,
+                run_id=_approval_run_id(store, task.task_id),
+                idempotency_key=args.idempotency_key,
+            )
+        except ValueError as error:
+            print(json.dumps({"error": str(error), "task_id": args.task_id}, indent=2), file=sys.stderr)
+            raise SystemExit(2)
+        print(json.dumps(confirmation.to_dict(), indent=2, ensure_ascii=False))
         return
 
     if args.command == "preflight":
@@ -308,6 +453,134 @@ def main() -> None:
             print(json.dumps({"error": f"Handoff not found for task: {args.task_id}"}, indent=2), file=sys.stderr)
             raise SystemExit(1)
         print(json.dumps(handoff, indent=2, ensure_ascii=False))
+        return
+
+    if args.command == "review":
+        task = store.get_task(args.task_id)
+        if task is None:
+            print(json.dumps({"error": f"Task not found: {args.task_id}"}, indent=2), file=sys.stderr)
+            raise SystemExit(1)
+        handoff = store.get_handoff(args.task_id)
+        if handoff is None:
+            print(json.dumps({"error": f"Handoff not found for task: {args.task_id}"}, indent=2), file=sys.stderr)
+            raise SystemExit(1)
+        approval = next(
+            (item for item in store.list_approvals() if item["task_id"] == args.task_id),
+            None,
+        )
+        run = next(
+            (item for item in store.list_runs() if item["task_id"] == args.task_id),
+            None,
+        )
+        trace = store.list_events(run["run_id"]) if run else []
+        prompt = build_approval_prompt(asdict(task), handoff, approval) if approval else None
+        print(json.dumps({
+            "task": asdict(task),
+            "handoff": handoff,
+            "approval": approval,
+            "run": run,
+            "trace": trace,
+            "conversation": prompt.to_dict() if prompt else None,
+            "review": {
+                "decision_required": bool(approval and approval["status"] == "pending"),
+                "external_effects": False,
+                "context_refs": task.source_refs,
+                "material_uncertainties": task.unknowns,
+                "next_actions": handoff["next_actions"],
+            },
+        }, indent=2, ensure_ascii=False))
+        return
+
+    if args.command == "prompt":
+        task = store.get_task(args.task_id)
+        handoff = store.get_handoff(args.task_id)
+        approval = next((item for item in store.list_approvals() if item["task_id"] == args.task_id), None)
+        if task is None or handoff is None or approval is None:
+            print(json.dumps({"error": f"Approval context not found for task: {args.task_id}"}, indent=2), file=sys.stderr)
+            raise SystemExit(1)
+        service = ApprovalConversationService(store, _conversation_transport(args.transport))
+        rendered = service.render(
+            task,
+            handoff,
+            approval,
+            conversation_id=args.conversation_id or f"conversation-{task.task_id}",
+        )
+        if args.as_json:
+            print(json.dumps(rendered.to_dict(), indent=2, ensure_ascii=False))
+        else:
+            print(rendered.text)
+        return
+
+    if args.command == "respond":
+        task = store.get_task(args.task_id)
+        approval_data = store.get_pending_approval(args.task_id)
+        handoff = store.get_handoff(args.task_id)
+        approval_data = approval_data or next(
+            (item for item in store.list_approvals() if item["task_id"] == args.task_id),
+            None,
+        )
+        if task is None or approval_data is None or handoff is None:
+            print(json.dumps({"error": f"Pending approval context not found for task: {args.task_id}"}, indent=2), file=sys.stderr)
+            raise SystemExit(1)
+        approval = store.get_approval(approval_data["approval_id"])
+        assert approval is not None
+        transport = _conversation_transport(args.transport)
+        conversation_id = args.conversation_id or f"conversation-{task.task_id}"
+        envelope = ConversationInput(
+            conversation_id=conversation_id,
+            channel=transport.channel,
+            transport=transport.name,
+            actor_id=args.decided_by,
+            task_id=task.task_id,
+            approval_id=approval.approval_id,
+            idempotency_key=args.idempotency_key or f"{conversation_id}:{approval.approval_id}:{args.option or args.text}",
+            text=args.text,
+            option_key=args.option,
+        )
+        service = ApprovalConversationService(store, transport)
+        try:
+            response, decision_recorded = service.respond(
+                task,
+                handoff,
+                approval,
+                envelope,
+                run_id=_approval_run_id(store, task.task_id),
+            )
+        except ValueError as error:
+            print(json.dumps({"error": str(error), "task_id": args.task_id}, indent=2), file=sys.stderr)
+            raise SystemExit(2)
+        if not decision_recorded:
+            print(json.dumps({
+                "task_id": task.task_id,
+                "response": response.__dict__,
+                "decision_recorded": False,
+                "approval": approval.__dict__,
+                "message": "A aprovação continua pendente; esclareça ou ajuste a proposta." if approval.status == "pending" else "A aprovação já foi decidida; nenhuma nova decisão foi registrada.",
+            }, indent=2, ensure_ascii=False))
+            return
+        print(json.dumps({"task_id": task.task_id, "response": response.__dict__, "approval": approval.__dict__, "status": task.status}, indent=2, ensure_ascii=False))
+        return
+
+    if args.command == "diagnose":
+        task = store.get_task(args.task_id)
+        if task is None:
+            print(json.dumps({"error": f"Task not found: {args.task_id}"}, indent=2), file=sys.stderr)
+            raise SystemExit(1)
+        handoff = store.get_handoff(args.task_id)
+        if handoff is None:
+            print(json.dumps({"error": f"Handoff not found for task: {args.task_id}"}, indent=2), file=sys.stderr)
+            raise SystemExit(1)
+        approval = next(
+            (item for item in store.list_approvals() if item["task_id"] == args.task_id),
+            None,
+        )
+        if approval is None or approval["status"] != "approved":
+            print(json.dumps({
+                "error": "Diagnostic requires an approved handoff",
+                "task_id": args.task_id,
+            }, indent=2), file=sys.stderr)
+            raise SystemExit(2)
+        print(json.dumps(build_diagnostic_report(asdict(task), handoff), indent=2, ensure_ascii=False))
         return
 
     if args.command == "run":

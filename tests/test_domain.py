@@ -1,6 +1,6 @@
 import pytest
 
-from buzz.models import ContextPack, Event, Handoff, Run, Source, Task, transition_task
+from buzz.models import Approval, ContextPack, Event, Handoff, Run, Source, Task, transition_task
 
 
 def test_task_follows_canonical_pipeline():
@@ -59,3 +59,21 @@ def test_event_requires_run_and_preserves_payload():
 def test_run_rejects_unknown_status():
     with pytest.raises(ValueError, match="Unknown run status"):
         Run(run_id="run-1", task_id="task-1", status="paused").validate()
+
+
+def test_approval_requires_human_decision_for_terminal_status():
+    approval = Approval(
+        approval_id="approval-1",
+        task_id="task-1",
+        handoff_id="handoff-1",
+        status="pending",
+    )
+    approval.validate()
+    approval.decide("approved", decided_by="human-operator", reason="reviewed")
+
+    assert approval.status == "approved"
+    assert approval.decided_by == "human-operator"
+    assert approval.reason == "reviewed"
+
+    with pytest.raises(ValueError, match="already decided"):
+        approval.decide("rejected", decided_by="human-operator")
