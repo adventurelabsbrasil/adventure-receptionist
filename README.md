@@ -1,12 +1,35 @@
 # Adventure Receptionist
 
-`adventure-receptionist` é o núcleo inicial do Adventure Agent Orchestration Control Plane.
-`buzz` é a persona e o comando de entrada.
+`adventure-receptionist` é o núcleo inicial do **Buzz Control Plane** da Adventure.
+`buzz` é o comando local de entrada e `receptionist` é o perfil de intake.
 
-## O que significa Buzz
+## Nomenclatura canônica
 
-Neste projeto, Buzz não significa buzz de marketing, tendência, hype ou volume de conversa.
-Buzz é o sistema local-first de recepção, triagem, contexto explícito, handoff e controle
+Há dois artefatos relacionados chamados Buzz. Eles não são o mesmo runtime:
+
+- **Buzz Bot**: o agente/CEO conversacional existente (`@ceo_buzz_Bot`), operando por
+  OpenClaw e canais de chat. Quando a conversa disser apenas “Buzz” no contexto de agente,
+  este é o significado canônico do SSOT.
+- **Buzz Control Plane**: este projeto (`adventure-receptionist`), o sistema local-first de
+  intake, triagem, seleção de contexto, handoff, aprovação e trace.
+- **Buzz Receptionist**: o perfil `receptionist` dentro do Buzz Control Plane; não é um bot
+  Telegram nem um gateway.
+- **OpenClaw Gateway**: a infraestrutura de canal que transporta mensagens até agentes; não é
+  o Buzz e não substitui o Buzz Control Plane.
+
+Regra para documentação, prompts e handoffs: não usar “Buzz” sozinho quando houver risco de
+ambiguidade. Usar `Buzz Bot`, `Buzz Control Plane`, `Buzz Receptionist` ou `OpenClaw Gateway`.
+
+Integração-alvo:
+
+```text
+Telegram → Buzz Bot/OpenClaw → Buzz Control Plane → Buzz Receptionist
+```
+
+## O que significa Buzz Control Plane
+
+Neste projeto, Buzz Control Plane não significa buzz de marketing, tendência, hype ou volume de
+conversa. É o sistema local-first de recepção, triagem, contexto explícito, handoff e controle
 operacional dos agentes da Adventure — uma camada para separar sinal de ruído.
 
 O MVP é local-first, model-agnostic e read-only por padrão. Ele valida o fluxo de intake,
